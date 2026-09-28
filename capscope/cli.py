@@ -1,7 +1,8 @@
 """Command line entry point.
 
-    capscope path/to/file.py:build_model [--html out.html] [--port 8765] [--no-open]
-                                        [--summary] [--n-batches 8]
+    capscope path/to/file.py:build_model [--html out.html] [--json data.json]
+                                        [--export report.md|report.json|runs.jsonl|-]
+                                        [--port 8765] [--no-open] [--summary] [--n-batches 8]
     capscope saved_report.html            # reopen a saved report: no model, no recompute
 
 The factory may return:
@@ -54,6 +55,10 @@ def main(argv=None) -> int:
     ap.add_argument("factory", help="path/to/file.py:build_model, or a saved report.html / report.json to reopen")
     ap.add_argument("--html", help="save a self-contained HTML report to this path")
     ap.add_argument("--json", help="save the raw report data to this path (reopen with `capscope file.json`)")
+    ap.add_argument("--export", metavar="PATH",
+                    help="write a compact, self-describing summary for logs / LLMs: every module's metrics, "
+                         "verdict and graph neighbours plus a legend. .md = Markdown, .jsonl = append one JSON "
+                         "line, otherwise JSON; '-' prints Markdown to stdout")
     ap.add_argument("--port", type=int, default=0, help="port for the GUI server (default: random free port)")
     ap.add_argument("--no-open", action="store_true", help="do not open a browser")
     ap.add_argument("--no-gui", action="store_true", help="do not launch the GUI (print the summary instead)")
@@ -80,6 +85,13 @@ def main(argv=None) -> int:
         print(f"[capscope] wrote {report.to_html(args.html)}")
     if args.json:
         print(f"[capscope] wrote {report.to_json_file(args.json)}")
+    if args.export == "-":
+        # utf-8 regardless of the console code page (the document uses arrows and superscripts)
+        sys.stdout.flush()
+        sys.stdout.buffer.write((report.to_llm("md", source=args.factory) + "\n").encode("utf-8"))
+        sys.stdout.buffer.flush()
+    elif args.export:
+        print(f"[capscope] wrote {report.to_llm_file(args.export, source=args.factory)}")
     if args.summary or args.no_gui:
         report.summary()
     if not args.no_gui:

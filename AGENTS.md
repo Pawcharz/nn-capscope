@@ -29,7 +29,8 @@ capscope/            the library — everything importable, no side effects at i
   metrics.py         rank/saturation, weight spectra (Hill alpha), CKA, dead/duplicate units
   truncation.py      SVD truncation sweep (used rank, marginal pressure)
   verdict.py         upstream carry, verdict rules, sentences, growth priority, THRESH
-  report.py          inspect() orchestration, Report (summary / to_html / show), HTML payload
+  report.py          inspect() orchestration, Report (summary / to_html / show / to_llm), HTML payload
+  export.py          compact self-describing export (JSON / JSON lines / Markdown) with the field and verdict legend
   cli.py             `capscope file.py:factory` entry point
   gui/template.html  the GUI: hand-rolled SVG + vanilla JS, data injected as JSON
 tests/               acceptance tests against a toy model with designed ground truth

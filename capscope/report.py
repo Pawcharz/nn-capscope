@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 
 from .capture import Capture, ModuleRecord, is_ancestor, is_relative, matrix_params
+from .export import to_llm_dict, to_llm_json, to_llm_markdown
 from .metrics import (activation_histogram, alpha_reading, cka_matrix, rank_metrics,
                       unit_redundancy, weight_spectrum)
 from .truncation import _eval_loss, truncation_sweep
@@ -353,6 +354,39 @@ class Report:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(self.to_json(), encoding="utf-8")
+        return str(p)
+
+    # ---- compact export for logs and language models -----------------------
+    def to_llm(self, fmt: str = "json", source: Optional[str] = None) -> str:
+        """Self-describing summary: every module's scalar metrics, verdict,
+        sentence and graph neighbours plus a legend defining each field, with
+        no histograms, singular-value arrays or CKA matrix. ``fmt`` is
+        ``"json"`` (indented), ``"jsonl"`` (one line) or ``"md"`` (Markdown).
+        ``to_llm_dict()`` returns the same content as a dict."""
+        if fmt == "json":
+            return to_llm_json(self, source)
+        if fmt == "jsonl":
+            return to_llm_json(self, source, indent=None)
+        if fmt == "md":
+            return to_llm_markdown(self, source)
+        raise ValueError(f"unknown export format {fmt!r}; use 'json', 'jsonl' or 'md'")
+
+    def to_llm_dict(self, source: Optional[str] = None) -> dict:
+        return to_llm_dict(self, source)
+
+    def to_llm_file(self, path: str, source: Optional[str] = None) -> str:
+        """Write ``to_llm`` choosing the format from the suffix: ``.md`` is
+        Markdown, ``.jsonl`` appends one JSON line (a run log), anything else
+        is indented JSON."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        suf = p.suffix.lower()
+        if suf == ".jsonl":
+            with p.open("a", encoding="utf-8") as f:
+                f.write(self.to_llm("jsonl", source) + "\n")
+        else:
+            p.write_text(self.to_llm("md" if suf in (".md", ".markdown") else "json", source),
+                         encoding="utf-8")
         return str(p)
 
     def html(self) -> str:

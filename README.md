@@ -33,6 +33,7 @@ report = inspect(
 )
 report.show()          # serve the GUI on localhost and open a browser
 report.to_html(path)   # save a self-contained HTML file
+report.to_llm("md")    # compact self-describing summary for logs / LLMs (also "json", "jsonl")
 report.summary()       # terminal table
 report.ranked()        # list of module dicts sorted by growth priority
 report["mp2.lin_self"] # every metric for one module
@@ -58,6 +59,29 @@ capscope out.html --html new.html --no-gui   # re-render with the current templa
 
 `--json out.json` saves the raw data; `Report.load(path)` does the same from
 Python for either format.
+
+### Export for logs and language models
+
+`--export PATH` writes a compact, self-describing summary meant to be stored in
+a run log and handed to a person or an LLM as-is: one record per module with
+every scalar metric (ranks, used rank and its source, pressure, carry, rank
+cap, alpha, redundancy, Dirichlet/MAD, CKA partner, per-matrix spectra
+summary), the verdict, its reason and sentence, producers and consumers, the
+edge list, the most similar module pairs, the warnings, provenance (capscope
+version, timestamp, source) and a `legend` that defines every field and every
+verdict. Histograms, singular-value arrays, the CKA matrix and the hierarchy
+are left out, so the file is a few tens of kB.
+
+```bash
+capscope path/to/file.py:build_model --no-gui --export report.md      # Markdown document
+capscope path/to/file.py:build_model --no-gui --export report.json    # indented JSON
+capscope path/to/file.py:build_model --no-gui --export runs.jsonl     # append one JSON line per run
+capscope out.html --no-gui --export -                                  # Markdown to stdout, from a saved report
+```
+
+From Python: `report.to_llm("json" | "jsonl" | "md")`, `report.to_llm_dict()`,
+`report.to_llm_file(path)` (format from the suffix). The field and verdict
+definitions live in `capscope/export.py` (`FIELDS`, `VERDICTS`).
 
 ## What it measures
 

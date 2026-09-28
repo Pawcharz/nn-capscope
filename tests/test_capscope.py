@@ -203,6 +203,64 @@ def test_data_free_mode():
     assert "bottleneck" in rep
     assert rep["bottleneck"]["alpha"] is not None
     assert rep.to_json()
+    # the compact export must survive a report with no activations, sweep or edges
+    d = rep.to_llm_dict()
+    b = next(m for m in d["modules"] if m["name"] == "bottleneck")
+    assert b["rank"] is None and b["sweep"] is None and b["alpha"] is not None
+    assert d["edges"] == [] and d["cka_top_pairs"] == []
+    assert "bottleneck" in rep.to_llm("md")
+
+
+def test_llm_export(report, tmp_path):
+    import json
+    from capscope.cli import main
+    from capscope.export import FIELDS, VERDICTS, FORMAT
+    from capscope.verdict import VERDICT_ORDER
+    d = report.to_llm_dict(source="toy")
+    assert d["format"] == FORMAT
+    assert d["meta"]["source"] == "toy" and d["meta"]["capscope_version"] and d["meta"]["generated_at"]
+    # every module, ranked by priority, with the same verdicts as the report
+    assert [m["name"] for m in d["modules"]] == [m["name"] for m in report.ranked()] == d["ranked"]
+    by = {m["name"]: m for m in d["modules"]}
+    for m in report.modules:
+        assert by[m["name"]]["verdict"] == m["verdict"]
+        assert by[m["name"]]["sentence"] == m["sentence"]
+    b = by["bottleneck"]
+    assert b["verdict"] == "saturated" and b["used_rank"] == report["bottleneck"]["used_rank"]
+    assert set(b["rank"]) == {"effective_rank", "stable_rank", "participation_ratio", "numerical_rank", "rank90", "rank99", "n_rows"}
+    assert b["sweep"]["curve"] and all(isinstance(v, float) for v in b["sweep"]["curve"].values())
+    assert b["producers"] == report["bottleneck"]["producers"] and b["consumers"] == report["bottleneck"]["consumers"]
+    assert [tuple(e) for e in d["edges"]] == report.edges
+    assert d["cka_top_pairs"] and d["cka_top_pairs"][0]["cka"] >= d["cka_top_pairs"][-1]["cka"]
+    # self-describing: every exported field and verdict has a legend entry; no bulk arrays
+    js = report.to_llm("json")
+    assert "singular_values" not in js and "cum_var" not in js and '"hist"' not in js and '"hierarchy"' not in js
+    for k in b:
+        assert k in FIELDS or k in ("rank", "sweep", "redundancy", "weights"), k
+    for k in b["rank"]:
+        assert f"rank.{k}" in FIELDS, k
+    assert set(VERDICTS) == set(VERDICT_ORDER) == set(d["legend"]["verdict_order"])
+    assert "\n" not in report.to_llm("jsonl").strip()
+    assert len(report.to_llm("jsonl")) < len(report.to_json())
+    # markdown: header, ranked table, one section per module, edges, legend
+    md = report.to_llm("md")
+    assert md.startswith("# capscope report:")
+    assert "## Modules by growth priority" in md and "## Legend" in md
+    assert md.count("\n### `") == len(report.modules)
+    assert "`mp1.lin_self` →" in md or "→ `bottleneck`" in md
+    assert "**saturated**" in md
+    # CLI: suffix picks the format; .jsonl appends one line per run; '-' prints
+    html = report.to_html(tmp_path / "r.html")
+    assert main([html, "--no-gui", "--quiet", "--export", str(tmp_path / "s.md")]) == 0
+    assert (tmp_path / "s.md").read_text(encoding="utf-8").startswith("# capscope report:")
+    assert main([html, "--no-gui", "--quiet", "--export", str(tmp_path / "s.json")]) == 0
+    loaded = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert loaded["format"] == FORMAT and loaded["meta"]["source"] == html
+    log = tmp_path / "runs.jsonl"
+    for _ in range(2):
+        assert main([html, "--no-gui", "--quiet", "--export", str(log)]) == 0
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2 and all(json.loads(l)["format"] == FORMAT for l in lines)
 
 
 # ---------------------------------------------------------------------------
