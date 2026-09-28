@@ -208,6 +208,7 @@ body.below .explain { display: block; }
       <button id="collapseAll">Collapse all</button>
       <button id="moveDetail" title="Show the detail panel as a full-width section below the graph instead of a sidebar">Panel below</button>
       <button id="guideBtn" title="How to read every metric and verdict (Esc closes)">Guide</button>
+      <button id="glossaryBtn" title="Plain definitions of every term used in the panels">Glossary</button>
     </div>
   </header>
   <div id="warnbox"></div>
@@ -652,7 +653,7 @@ function renderDetail() {
   let html = `<h2>${esc(m.name)}</h2>
     <div class="sub">${esc(m.type)} · ${kind} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
     <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div>
-    <div id="secTools"><span>sections:</span><button data-secs="open">open all</button><button data-secs="close">close all</button><button data-secs="reset">reset order</button><span style="flex:1"></span><span>drag ⋮⋮ to reorder · hover charts for values</span></div><div class="secs">`;
+    <div id="secTools"><span>sections:</span><button data-secs="open">open all</button><button data-secs="close">close all</button><button data-secs="reset">reset order</button><span class="help" data-guide="g-glossary" title="Glossary of terms" style="border:1px solid var(--line2);border-radius:10px;padding:1px 8px;cursor:pointer">glossary</span><span style="flex:1"></span><span>drag ⋮⋮ to reorder · hover charts for values</span></div><div class="secs">`;
 
   // 1. capacity: the numbers the verdict is made from
   section('capacity', 'Capacity verdict inputs', 'g-verdicts',
@@ -981,6 +982,7 @@ function showGuide(on, anchor) {
   if (el) el.scrollIntoView({ block: 'start' }); else body.scrollTop = 0;
 }
 document.getElementById('guideBtn').addEventListener('click', () => showGuide(true));
+document.getElementById('glossaryBtn').addEventListener('click', () => showGuide(true, 'g-glossary'));
 document.getElementById('guideClose').addEventListener('click', () => showGuide(false));
 guide.addEventListener('click', ev => { if (ev.target === guide) showGuide(false); });
 window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && guide.classList.contains('show')) showGuide(false); });

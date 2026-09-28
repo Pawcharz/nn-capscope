@@ -370,6 +370,7 @@ def test_html_renders_without_console_errors(report, tmp_path):
         assert box["width"] > 1300 and box["height"] > 700
         assert page.locator("#guide h2").count() >= 9
         assert page.locator("#g-svd").count() == 1
+        assert page.locator("#g-glossary").count() == 1 and page.locator("#g-glossary + table tr").count() >= 25
         assert "saturated" in page.locator("#guide table").nth(2).inner_text() or "saturated" in page.locator("#guide").inner_text()
         page.keyboard.press("Escape")
         assert not page.locator("#guide").is_visible()
