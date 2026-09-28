@@ -82,7 +82,7 @@ First match wins:
 | `narrow` | width < 8 (an output head); capacity metrics do not apply |
 | `passthrough` | leaf with no parameters (ReLU, Dropout…); points at the module feeding it |
 | `oversmoothed` | Dirichlet energy < 0.05 **and** < 30 % of the nearest upstream graph layer |
-| `upstream` | its rank merely tracks the upstream *carry* (the narrowest point along the paths feeding it) |
+| `upstream` | its used rank is within 10 % of the upstream *carry* (the narrowest point along the paths feeding it): it uses everything that arrives, so the limit is earlier |
 | `undertrained` | alpha > 6 |
 | `redundant` | > 35 % dead or duplicate units, or CKA > 0.98 with a module that is neither a relative nor downstream |
 | `saturated` / `tight` / `spare` | used rank > 85 % / > 60 % / otherwise of the width |
@@ -107,8 +107,16 @@ layers.
 * Oversmoothing is judged as **decay** relative to the nearest upstream graph
   layer, not as an absolute level; energies are computed on centred features
   so a DC offset does not fake smoothing. MAD is shown but not trusted.
-* Container-level edges are projections of leaf edges onto ancestors; the
-  root is never a node.
+* Graph nodes are the leaves **plus every container that builds its own
+  output** (a PyG-style `SAGEConv` returning `lin_l(agg) + lin_r(x)`, a
+  residual block doing `x + f(x)`): such an *emitter* is recovered by walking
+  back from its output, so its children feed it and it feeds the next layer.
+  Without this the whole message-passing stack is a hole in the graph.
+  Container-level edges are projections of node edges onto ancestors; the root
+  is never a node.
+* A container's weight rank cap comes from the leaf that produces its output,
+  not from its narrowest weight: a four-layer stack whose first layer takes 15
+  inputs is not "capped at 15" as a whole.
 * An undertrained checkpoint reports `used_rank = 1` everywhere (destroying
   weights costs nothing). capscope detects this and warns in the report
   header instead of reporting nonsense.
@@ -127,7 +135,10 @@ saved HTML works offline.
 * **Detail panel**: verdict sentence, metric grid, activation and weight
   singular-value spectra, variance-explained curve, loss-under-truncation
   sweep, alpha gauge with the < 2 / 2–6 / > 6 zones, activation histogram,
-  clickable nearest CKA neighbours, producers / consumers.
+  clickable nearest CKA neighbours, producers / consumers. **Panel below**
+  moves it under the graph as a full-width section (the page then scrolls);
+  both sidebars are resizable by dragging their gutters. Layout choices are
+  remembered in the browser.
 * **Similarity view**: full CKA heatmap (dark squares = redundant blocks),
   hover for values, click to select.
 

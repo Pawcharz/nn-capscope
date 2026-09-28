@@ -65,7 +65,7 @@ def inspect(
                       n_batches=len(batches)).run(batches)
 
     mods = _build_modules(model, cap)
-    edges = cap.leaf_edges() if cap else []
+    edges = cap.graph_edges() if cap else []
     if cap:
         log(f"[capscope] recovered {len(edges)} dataflow edges among {len(mods)} modules")
 
@@ -143,6 +143,8 @@ def _build_modules(model: nn.Module, cap: Optional[Capture]) -> Dict[str, dict]:
             "type": type(r.module).__name__,
             "depth": r.depth,
             "is_leaf": r.is_leaf,
+            "emits": bool(r.emits),
+            "is_node": bool(r.is_leaf or r.emits),
             "n_params_own": r.n_params_own,
             "n_params_total": r.n_params_total,
             "has_matrix": r.has_matrix,
@@ -177,19 +179,41 @@ def _build_modules(model: nn.Module, cap: Optional[Capture]) -> Dict[str, dict]:
         alphas = [w["alpha"] for w in m["weights"] if math.isfinite(w["alpha"])]
         m["alpha"] = float(np.median(alphas)) if alphas else None
         m["alpha_reading"] = alpha_reading(m["alpha"]) if m["alpha"] is not None else "n/a"
-        if m["weights"]:
-            binding = min(m["weights"], key=lambda w: w["max_rank"])
-            m["max_weight_rank"] = binding["max_rank"]
-            m["rank_cap"] = binding["rank_cap"]
-        else:
-            m["max_weight_rank"] = None
-            m["rank_cap"] = None
+        m["max_weight_rank"] = None
+        m["rank_cap"] = None
         if m["width"] is None and m["weights"] and r.is_leaf:
             m["width"] = m["weights"][0]["shape"][0]
         if m["in_dim"] is None and m["weights"] and r.is_leaf:
             m["in_dim"] = m["weights"][0]["shape"][1]
         mods[r.name] = m
+    _assign_rank_caps(mods)
     return mods
+
+
+def _assign_rank_caps(mods: Dict[str, dict]) -> None:
+    """The weight whose rank bounds each module's *output*.
+
+    A leaf: its narrowest matrix. A container: the matrices of the last leaf
+    executed inside it (the one that produces its output), not the narrowest
+    matrix anywhere inside it. A four-layer stack whose first layer takes 15
+    inputs is not "capped at 15" as a whole; nonlinearities in between let the
+    later layers use their full width, and the truncation sweep measures that.
+    """
+    by_exec = sorted(mods.values(), key=lambda m: m["exec_order"])
+    for m in mods.values():
+        if not m["weights"]:
+            continue
+        if m["is_leaf"]:
+            pool = m["weights"]
+        else:
+            last = None
+            for c in by_exec:
+                if c["is_leaf"] and c["weights"] and is_ancestor(m["name"], c["name"]):
+                    last = c
+            pool = last["weights"] if last is not None else m["weights"]
+        binding = min(pool, key=lambda w: w["max_rank"])
+        m["max_weight_rank"] = binding["max_rank"]
+        m["rank_cap"] = binding["rank_cap"]
 
 
 def _hierarchy(model: nn.Module, mods: Dict[str, dict]) -> List[dict]:
@@ -231,9 +255,9 @@ def _detect_problems(mods, base_loss, has_loss, cap) -> List[str]:
             "like their random initialisation. The model is undertrained; capacity verdicts are "
             "unreliable until it has trained further.")
     if cap is not None:
-        n_edges = len(cap.leaf_edges())
-        leaves = [m for m in mods.values() if m["is_leaf"]]
-        if len(leaves) > 1 and n_edges == 0:
+        n_edges = len(cap.graph_edges())
+        nodes = [m for m in mods.values() if m["is_node"]]
+        if len(nodes) > 1 and n_edges == 0:
             warns.append("No dataflow edges were recovered. Make sure the model's parameters require "
                          "grad and that outputs are differentiable tensors.")
     return warns
@@ -390,9 +414,11 @@ class Report:
                 pass
         if block:
             try:
-                t.join()
+                # join() with no timeout is uninterruptible on Windows: poll instead
+                while t.is_alive():
+                    t.join(0.5)
             except KeyboardInterrupt:
-                pass
+                print("[capscope] stopping")
             finally:
                 srv.shutdown()
                 srv.server_close()

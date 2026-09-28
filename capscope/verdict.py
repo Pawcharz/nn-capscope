@@ -20,7 +20,7 @@ THRESH = {
     "cka_dup": 0.98,
     "saturated": 0.85,
     "tight": 0.60,
-    "upstream_slack": 0.10,   # rank <= carry*(1+slack)+1  => tracks the input
+    "upstream_slack": 0.10,   # carry*(1-slack)-1 <= rank <= carry*(1+slack)+1  => tracks the input
 }
 
 
@@ -89,34 +89,37 @@ def assign_verdicts(mods: Dict[str, dict], cka: Optional[Dict] = None, thresh: D
         T.update(thresh)
     compute_carry(mods)
 
-    # consumers (leaf level), downstream reachability, sinks
-    leaves = {n for n, m in mods.items() if m["is_leaf"]}
+    # consumers (graph-node level), downstream reachability, sinks. A graph
+    # node is a leaf or an emitter container (one that builds its own output).
+    def _is_node(m: dict) -> bool:
+        return bool(m["is_leaf"] or m.get("emits"))
+    nodes = {n for n, m in mods.items() if _is_node(m)}
     for m in mods.values():
         m["consumers"] = []
     for m in mods.values():
-        if not m["is_leaf"]:
+        if m["name"] not in nodes:
             continue
         for p in m["producers"]:
-            if p in mods and mods[p]["is_leaf"]:
+            if p in nodes:
                 mods[p]["consumers"].append(m["name"])
     down: Dict[str, Set[str]] = {}
-    for n in sorted(leaves, key=lambda x: -mods[x]["exec_order"]):
+    for n in sorted(nodes, key=lambda x: -mods[x]["exec_order"]):
         s: Set[str] = set()
         for c in mods[n]["consumers"]:
             s.add(c)
             s |= down.get(c, set())
         down[n] = s
     for m in mods.values():
-        if m["is_leaf"]:
-            m["_down"] = down.get(m["name"], set())
+        if m["name"] in nodes:
+            m["_down"] = down.get(m["name"], set()) - {m["name"]}
         else:
-            own = {l for l in leaves if is_ancestor(m["name"], l)}
+            own = {l for l in nodes if is_ancestor(m["name"], l)}
             m["_down"] = set().union(*(down.get(l, set()) for l in own)) - own
             m["consumers"] = sorted({c for l in own for c in mods[l]["consumers"] if c not in own})
         m["is_sink"] = len(m["_down"]) == 0
 
     def _leaves_of(n: str) -> Set[str]:
-        return {n} if mods[n]["is_leaf"] else {l for l in leaves if is_ancestor(n, l)}
+        return {n} if n in nodes else {l for l in nodes if is_ancestor(n, l)}
 
     # best CKA partner that is neither a relative nor downstream of the module
     # (a consumer that merely copies its input is the consumer's problem)
@@ -209,8 +212,12 @@ def _verdict_for(m: dict, mods: Dict[str, dict], T: Dict) -> Tuple[str, str, str
 
     # 4. upstream: rank merely tracks a narrower input (traps 3 / 4) ----------
     if used is not None and width and carry is not None and carry < width:
-        eff = used if wcap is None else min(used, wcap)
-        if eff <= carry * (1 + T["upstream_slack"]) + 1:
+        # a leaf's output rank is bounded by its weight; a container's is not
+        # (nonlinearities between its layers lift it), so only leaves are capped
+        eff = min(used, wcap) if (wcap is not None and m["is_leaf"]) else used
+        slack = T["upstream_slack"]
+        # "tracks" means used ~= carry: using far *less* than what arrives is spare, not upstream
+        if carry * (1 - slack) - 1 <= eff <= carry * (1 + slack) + 1:
             src = _nearest_upstream(mods, name, lambda x: (x.get("width") or 0) <= carry
                                     and x["n_params_total"] > 0)
             if src:

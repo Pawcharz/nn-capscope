@@ -37,10 +37,25 @@ header label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
 #warnbox.show { display: block; }
 #warnbox div + div { margin-top: 4px; }
 
-main { display: grid; grid-template-columns: 340px 1fr 420px; min-height: 0; }
+main { display: grid; grid-template-columns: var(--leftw, 340px) 6px 1fr 6px var(--rightw, 420px); min-height: 0; }
 aside, section { min-height: 0; overflow: hidden; }
 #left { border-right: 1px solid var(--line); display: flex; flex-direction: column; background: var(--panel); }
 #right { border-left: 1px solid var(--line); overflow-y: auto; background: var(--panel); padding: 12px 14px 40px; }
+.gutter { cursor: col-resize; background: var(--bg); position: relative; }
+.gutter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--line); }
+.gutter:hover::after, body.resizing .gutter::after { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
+/* detail panel moved below the graph: the page scrolls, the panel spans the width */
+#below { display: none; border-top: 1px solid var(--line); background: var(--panel); }
+body.below { overflow: auto; }
+body.below #app { height: auto; min-height: 100vh; grid-template-rows: 48px auto minmax(360px, 62vh) auto; }
+body.below main { grid-template-columns: var(--leftw, 340px) 6px 1fr; }
+body.below #gutR { display: none; }
+body.below #below { display: block; }
+body.below #right { border-left: 0; overflow: visible; max-width: 1500px; margin: 0 auto; padding: 14px 24px 60px; }
+body.below #right .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+body.below #right .charts2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+body.below #right .chart svg { max-height: 260px; margin: 0 auto; }
 #center { position: relative; background: radial-gradient(circle at 50% 50%, #0f1522 0, #0b0f17 100%); }
 #graph { width: 100%; height: 100%; display: block; cursor: grab; }
 #graph.dragging { cursor: grabbing; }
@@ -88,8 +103,7 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
 .empty { color: var(--dim); font-style: italic; padding: 10px 0; }
 .axis text { fill: var(--dim); font-size: 9px; font-family: var(--mono); }
 .axis line, .axis path { stroke: var(--line2); }
-@media (max-width: 1150px) { main { grid-template-columns: 250px 1fr 340px; } }
-@media (max-width: 820px) { main { grid-template-columns: 1fr; grid-template-rows: 32vh 1fr 36vh; } #left, #right { border: 0; border-bottom: 1px solid var(--line); } header .meta { display: none; } }
+@media (max-width: 820px) { main { grid-template-columns: 1fr !important; grid-template-rows: 32vh 1fr 36vh; } .gutter { display: none; } #left, #right { border: 0; border-bottom: 1px solid var(--line); } header .meta { display: none; } }
 #tip { position: fixed; pointer-events: none; background: #0b0f17; border: 1px solid var(--line2); padding: 6px 8px; border-radius: 6px; font-size: 11px; font-family: var(--mono); display: none; z-index: 10; max-width: 320px; white-space: pre; }
 .hint { color: var(--dim); font-size: 11px; padding: 6px 10px; }
 </style>
@@ -108,6 +122,7 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
       <label><input type="checkbox" id="leavesOnly"> leaves only</label>
       <button id="expandAll">Expand all</button>
       <button id="collapseAll">Collapse all</button>
+      <button id="moveDetail" title="Show the detail panel as a full-width section below the graph instead of a sidebar">Panel below</button>
     </div>
   </header>
   <div id="warnbox"></div>
@@ -125,6 +140,7 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
       <div id="list"></div>
       <div class="hint">Click a row to select. Scroll to zoom the graph, drag to pan, ± to collapse/expand.</div>
     </aside>
+    <div class="gutter" id="gutL" title="Drag to resize"></div>
     <section id="center">
       <svg id="graph" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -141,8 +157,10 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
       <div id="graphtools"><button id="fit">Fit</button></div>
       <div id="legend"></div>
     </section>
+    <div class="gutter" id="gutR" title="Drag to resize"></div>
     <aside id="right"><div class="empty">Select a module.</div></aside>
   </main>
+  <section id="below"></section>
 </div>
 <div id="tip"></div>
 <script>
@@ -164,7 +182,9 @@ const H = {};
 const KIDS = {};
 DATA.hierarchy.forEach(h => { H[h.name] = h; KIDS[h.name] = []; });
 DATA.hierarchy.forEach(h => { if (h.parent !== null && h.parent !== undefined && KIDS[h.parent]) KIDS[h.parent].push(h.name); });
-const LEAVES = DATA.modules.filter(m => m.is_leaf).map(m => m.name);
+// graph nodes: leaves, plus containers that build their own output (`emits`)
+const NODES = DATA.modules.filter(m => m.is_leaf || m.emits).map(m => m.name);
+const isNode = m => !!(m && (m.is_leaf || m.emits));
 const CONTAINERS = DATA.hierarchy.filter(h => !h.is_leaf && h.name !== '').map(h => h.name);
 const EDGES = DATA.edges;
 const CKA_IDX = {};
@@ -214,7 +234,7 @@ function visibleNodeOf(leaf) {
 }
 function projectedGraph() {
   const nodes = new Set();
-  LEAVES.forEach(l => nodes.add(visibleNodeOf(l)));
+  NODES.forEach(l => nodes.add(visibleNodeOf(l)));
   const edgeSet = new Map();
   EDGES.forEach(([u, v]) => {
     const U = visibleNodeOf(u), V = visibleNodeOf(v);
@@ -279,6 +299,7 @@ function renderGraph() {
       for (const a of ancestors(c)) if (state.collapsed.has(a)) return;
       const desc = Object.keys(P).filter(n => n.startsWith(c + '.'));
       if (desc.length === 0) return;
+      if (P[c]) desc.push(c);                  // an emitter container is boxed inside its own hull
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, height = 0;
       desc.forEach(n => { const p = P[n]; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + NODE_W); y1 = Math.max(y1, p.y + NODE_H); height = Math.max(height, n.split('.').length - c.split('.').length); });
       const pad = 8 + 7 * height;
@@ -314,7 +335,7 @@ function renderGraph() {
       <text x="12" y="17" font-size="12" font-weight="600" font-family="var(--mono)" fill="#e5e7eb">${esc(isCont ? n : shortName(n)).slice(0, 22)}${isCont ? ' ▸' : ''}</text>
       <text x="12" y="31" font-size="10" fill="#94a3b8">${esc((m ? m.type : h.type) || '')}${m && m.width ? ' · w' + m.width : ''}${m ? ' · ' + esc(m.verdict) : ''}</text>
       ${frac !== null ? `<rect x="12" y="38" width="${NODE_W - 24}" height="4" rx="2" fill="#1f2937"/><rect x="12" y="38" width="${(NODE_W - 24) * Math.min(1, frac)}" height="4" rx="2" fill="${col}"/>` : ''}
-      ${isCont ? `<g class="toggle" data-name="${esc(n)}"><rect x="${NODE_W - 20}" y="4" width="14" height="14" rx="3" fill="#1f2937" stroke="#334155"/><text x="${NODE_W - 13}" y="15" text-anchor="middle" font-size="12" fill="#e5e7eb">+</text></g>` : ''}
+      ${isCont ? `<g class="toggle" data-name="${esc(n)}"><rect x="${NODE_W - 20}" y="4" width="14" height="14" rx="3" fill="#1f2937" stroke="#334155"/><text x="${NODE_W - 13}" y="15" text-anchor="middle" font-size="12" fill="#e5e7eb">${state.collapsed.has(n) || state.leavesOnly ? '+' : '−'}</text></g>` : ''}
     </g>`;
   });
   vp.innerHTML = hulls + edges + nodes;
@@ -365,7 +386,7 @@ document.getElementById('leavesOnly').addEventListener('change', ev => { state.l
 const listEl = document.getElementById('list');
 function listRows() {
   let rows = DATA.modules.slice();
-  if (state.leavesOnly) rows = rows.filter(m => m.is_leaf);
+  if (state.leavesOnly) rows = rows.filter(isNode);
   if (state.search) rows = rows.filter(m => m.name.toLowerCase().includes(state.search) || m.verdict.includes(state.search) || m.type.toLowerCase().includes(state.search));
   const key = state.sort, dir = state.sortDir;
   rows.sort((a, b) => { const va = a[key] ?? -1, vb = b[key] ?? -1; return (va - vb) * dir || a.exec_order - b.exec_order; });
@@ -514,7 +535,7 @@ function renderDetail() {
   const col = colorOf(m); const r = m.rank || {}; const red = m.redundancy || {};
   const cap = m.rank_cap ? (m.rank_cap === 'input' ? `input-capped (≤${m.max_weight_rank})` : m.rank_cap === 'output' ? `output-capped (≤${m.max_weight_rank})` : `square (≤${m.max_weight_rank})`) : '–';
   let html = `<h2>${esc(m.name)}</h2>
-    <div class="sub">${esc(m.type)} · ${m.is_leaf ? 'leaf' : 'container'} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
+    <div class="sub">${esc(m.type)} · ${m.is_leaf ? 'leaf' : (m.emits ? 'container that computes its own output' : 'container')} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
     <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div>
     <div class="grid">
       ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–')}
@@ -584,7 +605,7 @@ function heatColor(v) {
 function renderHeat() {
   if (state.view !== 'heat') return;
   let names = (DATA.cka.names || []).slice();
-  if (state.leavesOnly) names = names.filter(n => M[n] && M[n].is_leaf);
+  if (state.leavesOnly) names = names.filter(n => isNode(M[n]));
   names.sort((a, b) => execOf(a) - execOf(b));
   if (!names.length) { heat.innerHTML = '<div class="empty">No CKA data (no activations captured).</div>'; return; }
   const n = names.length; const cellSz = Math.max(8, Math.min(26, Math.floor(700 / n)));
@@ -636,13 +657,54 @@ document.getElementById('tab-heat').addEventListener('click', () => setView('hea
 window.addEventListener('resize', () => { if (state.view === 'graph') fitView(); });
 
 // ---------------------------------------------------------------------------
+// layout: resizable sidebars, detail panel as sidebar or as a section below
+// ---------------------------------------------------------------------------
+const mainEl = document.querySelector('main');
+const belowEl = document.getElementById('below');
+const moveBtn = document.getElementById('moveDetail');
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('capscope.layout') || '{}') || {}; } catch (e) { return {}; } })();
+function savePrefs() { try { localStorage.setItem('capscope.layout', JSON.stringify(prefs)); } catch (e) { /* storage unavailable */ } }
+function applyWidths() {
+  if (prefs.leftw) mainEl.style.setProperty('--leftw', prefs.leftw + 'px');
+  if (prefs.rightw) mainEl.style.setProperty('--rightw', prefs.rightw + 'px');
+}
+function setBelow(on) {
+  document.body.classList.toggle('below', on);
+  (on ? belowEl : mainEl).appendChild(right);
+  moveBtn.textContent = on ? 'Panel right' : 'Panel below';
+  moveBtn.classList.toggle('active', on);
+  prefs.below = on; savePrefs();
+  requestAnimationFrame(() => { if (state.view === 'graph') fitView(); else renderHeat(); });
+}
+moveBtn.addEventListener('click', () => setBelow(!document.body.classList.contains('below')));
+function gutterDrag(gutter, side) {
+  gutter.addEventListener('mousedown', ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    document.body.classList.add('resizing');
+    const move = e => {
+      const r = mainEl.getBoundingClientRect();
+      const max = Math.max(240, r.width * 0.6);
+      const w = Math.round(Math.min(max, Math.max(180, side === 'left' ? e.clientX - r.left : r.right - e.clientX)));
+      prefs[side === 'left' ? 'leftw' : 'rightw'] = w; applyWidths();
+    };
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); savePrefs(); if (state.view === 'graph') fitView(); };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  });
+}
+gutterDrag(document.getElementById('gutL'), 'left');
+gutterDrag(document.getElementById('gutR'), 'right');
+applyWidths();
+if (prefs.below) setBelow(true);
+
+// ---------------------------------------------------------------------------
 // boot
 // ---------------------------------------------------------------------------
 renderList(); renderGraph(); fitView();
 const top = DATA.modules.slice().sort((a, b) => b.priority - a.priority || a.exec_order - b.exec_order)[0];
 if (top) select(top.name);
 fitView();
-window.capscope = { state, data: DATA, select, renderGraph, renderHeat, setView, fitView };
+window.capscope = { state, data: DATA, select, renderGraph, renderHeat, setView, fitView, setBelow };
 })();
 </script>
 </body>

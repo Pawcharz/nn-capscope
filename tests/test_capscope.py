@@ -124,6 +124,62 @@ def test_summary_and_serialisation(report, tmp_path):
     assert Path(out).stat().st_size > 50_000
 
 
+class _SumConv(torch.nn.Module):
+    """A PyG-style SAGEConv: the container itself builds the output (a sum of two
+    Linears), so it must become a graph node, not a hole in the graph."""
+
+    def __init__(self, din, dout):
+        super().__init__()
+        self.lin_l = torch.nn.Linear(din, dout)
+        self.lin_r = torch.nn.Linear(din, dout, bias=False)
+
+    def forward(self, x, edge_index):
+        src, dst = edge_index[0], edge_index[1]
+        agg = torch.zeros_like(x).index_add_(0, dst, x[src])
+        return self.lin_l(agg) + self.lin_r(x)
+
+
+class _SumStack(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.convs = torch.nn.ModuleList([_SumConv(8, 32), _SumConv(32, 32)])
+        self.trunk = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.GELU())
+        self.head = torch.nn.Linear(32, 4)
+
+    def forward(self, batch):
+        x, ei = batch
+        for i, c in enumerate(self.convs):
+            x = c(x, ei)
+            if i == 0:
+                x = torch.relu(x)                      # functional: no module boundary
+        return self.head(self.trunk(x))
+
+
+def test_emitter_containers_are_graph_nodes():
+    torch.manual_seed(0)
+    model = _SumStack()
+    g = torch.Generator().manual_seed(0)
+    batches = [(torch.randn(50, 8, generator=g), torch.randint(0, 50, (2, 120), generator=g)) for _ in range(2)]
+    rep = inspect(model, batches, forward_fn=lambda m, b: m(b), edge_index_fn=lambda b: b[1], n_batches=2)
+    assert rep["convs.0"]["emits"] and rep["convs.1"]["emits"]
+    assert not rep["trunk"]["emits"] and "convs" not in rep        # handed through / never called
+    expected = {
+        ("convs.0.lin_l", "convs.0"), ("convs.0.lin_r", "convs.0"),
+        ("convs.0", "convs.1.lin_l"), ("convs.0", "convs.1.lin_r"),
+        ("convs.1.lin_l", "convs.1"), ("convs.1.lin_r", "convs.1"),
+        ("convs.1", "trunk.0"), ("trunk.0", "trunk.1"), ("trunk.1", "head"),
+    }
+    assert set(rep.edges) == expected, f"missing={sorted(expected - set(rep.edges))} extra={sorted(set(rep.edges) - expected)}"
+    assert rep["convs.0"]["consumers"] == ["convs.1.lin_l", "convs.1.lin_r"]
+    assert rep["head"]["is_sink"] and not rep["convs.1"]["is_sink"]
+    # a container's rank cap comes from the leaf that produces its output, not its narrowest weight
+    assert rep["convs.0"]["max_weight_rank"] == 8            # both Linears take 8 inputs
+    assert rep["convs.1"]["max_weight_rank"] == 32
+    assert rep["trunk"]["rank_cap"] == "square" and rep["trunk"]["max_weight_rank"] == 32
+    js = rep.to_json()
+    assert '"emits": true' in js
+
+
 def test_data_free_mode():
     model = ToyGraphNet()
     rep = inspect(model)             # weight spectra only, no loader
@@ -181,6 +237,24 @@ def test_html_renders_without_console_errors(report, tmp_path):
         page.locator("#search").fill("mp3")
         assert page.locator("table.mods tr[data-name]").count() >= 4
         page.locator("#fit").click()
+        # detail panel: move below the graph and back
+        page.locator("#moveDetail").click()
+        assert page.locator("#below #right h2").count() == 1
+        assert page.evaluate("document.body.classList.contains('below')")
+        page.locator("#search").fill("")
+        page.locator("table.mods tr[data-name='mp2']").click()
+        assert page.locator("#below #right h2").inner_text() == "mp2"
+        page.locator("#moveDetail").click()
+        assert page.locator("main #right h2").count() == 1
+        # sidebars: drag the gutters
+        left_before = page.locator("#left").bounding_box()["width"]
+        gut = page.locator("#gutL").bounding_box()
+        page.mouse.move(gut["x"] + 3, gut["y"] + 200); page.mouse.down(); page.mouse.move(gut["x"] + 120, gut["y"] + 200, steps=4); page.mouse.up()
+        assert page.locator("#left").bounding_box()["width"] > left_before + 60
+        right_before = page.locator("#right").bounding_box()["width"]
+        gut = page.locator("#gutR").bounding_box()
+        page.mouse.move(gut["x"] + 3, gut["y"] + 200); page.mouse.down(); page.mouse.move(gut["x"] + 100, gut["y"] + 200, steps=4); page.mouse.up()
+        assert page.locator("#right").bounding_box()["width"] < right_before - 60
         browser.close()
     assert not page_errors, page_errors
     assert not errors, errors

@@ -122,6 +122,14 @@ class ModuleRecord:
     mad: List[float] = field(default_factory=list)
     # dataflow: names of the modules whose outputs feed this module's inputs
     producers: Set[str] = field(default_factory=set)
+    # a container whose output tensor is built by its own forward (a sum, a cat, a gate)
+    # rather than handed through from a child: it is a graph node in its own right, and its
+    # producers are found by walking back from its *output* (so its children count)
+    emits: bool = False
+
+    @property
+    def is_node(self) -> bool:
+        return self.is_leaf or self.emits
     act_min: float = math.inf
     act_max: float = -math.inf
 
@@ -174,6 +182,7 @@ class Capture:
         self._graph_mode = False
         self._registry: Dict[int, Tuple[Any, List[str]]] = {}
         self._pending_inputs: List[Tuple[str, List[Any]]] = []
+        self._pending_outputs: List[Tuple[str, List[Any]]] = []
 
         self._build_records()
 
@@ -232,14 +241,18 @@ class Capture:
         # --- graph-mode bookkeeping (traps 1 / 2 / 6) ---
         if self._graph_mode:
             if name != self.root_name:
+                out_gfs = []
                 for t in iter_tensors(output):
                     gf = t.grad_fn
                     if gf is not None:
+                        out_gfs.append(gf)
                         ent = self._registry.get(id(gf))
                         if ent is None:
                             self._registry[id(gf)] = (gf, [name])   # strong ref to gf
                         elif name not in ent[1]:
                             ent[1].append(name)
+                if out_gfs and not rec.is_leaf:
+                    self._pending_outputs.append((name, out_gfs))
                 gfs = []
                 for t in list(iter_tensors(args)) + list(iter_tensors(kwargs)):
                     if t.grad_fn is not None:
@@ -268,37 +281,64 @@ class Capture:
                 rec.mad.append(mad)
 
     # ---- graph resolution -------------------------------------------------
-    def _resolve_edges(self):
-        """Walk backwards from every module's input grad_fns to the nearest
-        registered producers (DFS through next_functions)."""
+    def _walk_back(self, name: str, gfs: Sequence[Any]) -> Set[str]:
+        """Nearest registered producers reachable backwards from ``gfs``
+        (DFS through next_functions), ignoring registrations to ``name`` itself
+        and its ancestors."""
         reg = self._registry
+        found: Set[str] = set()
+        for gf in gfs:
+            seen: Set[int] = set()
+            stack = [gf]
+            while stack:
+                node = stack.pop()
+                nid = id(node)
+                if nid in seen:
+                    continue
+                seen.add(nid)
+                ent = reg.get(nid)
+                if ent is not None:
+                    # deepest registered module wins (a Sequential shares
+                    # its grad_fn with its last child)
+                    prods = [p for p in ent[1] if p != name and not is_ancestor(p, name)]
+                    if prods:
+                        found.add(_deepest(prods))
+                        continue          # stop this path here
+                if hasattr(node, "variable"):
+                    continue              # AccumulateGrad: a parameter leaf
+                for nxt, _ in getattr(node, "next_functions", ()):
+                    if nxt is not None and id(nxt) not in seen:
+                        stack.append(nxt)
+        return found
+
+    def _resolve_edges(self):
+        """Recover producers for every module.
+
+        Leaves and plain containers walk backwards from their *input*
+        grad_fns. A container whose output grad_fn is registered to none of its
+        descendants built that tensor itself (``lin_l(agg) + lin_r(x)``): it is
+        an *emitter*, a graph node of its own, and walks back from its
+        *output* instead, so its children (and any residual input) are its
+        producers.
+        """
+        reg = self._registry
+        for name, out_gfs in self._pending_outputs:
+            rec = self.records[name]
+            handed_through = any(
+                is_ancestor(name, p)
+                for gf in out_gfs for p in (reg.get(id(gf), (None, []))[1]))
+            if not handed_through:
+                rec.emits = True
+                rec.producers |= self._walk_back(name, out_gfs)
         for name, gfs in self._pending_inputs:
             rec = self.records[name]
-            for gf in gfs:
-                seen: Set[int] = set()
-                stack = [gf]
-                while stack:
-                    node = stack.pop()
-                    nid = id(node)
-                    if nid in seen:
-                        continue
-                    seen.add(nid)
-                    ent = reg.get(nid)
-                    if ent is not None:
-                        # deepest registered module wins (a Sequential shares
-                        # its grad_fn with its last child)
-                        prods = [p for p in ent[1] if p != name and not is_ancestor(p, name)]
-                        if prods:
-                            rec.producers.add(_deepest(prods))
-                            continue      # stop this path here
-                    if hasattr(node, "variable"):
-                        continue          # AccumulateGrad: a parameter leaf
-                    for nxt, _ in getattr(node, "next_functions", ()):
-                        if nxt is not None and id(nxt) not in seen:
-                            stack.append(nxt)
+            if rec.emits:
+                continue
+            rec.producers |= self._walk_back(name, gfs)
         # release bookkeeping (trap 2: never keep the activation history alive)
         self._registry = {}
         self._pending_inputs = []
+        self._pending_outputs = []
 
     # ---- driver -----------------------------------------------------------
     def run(self, loader) -> "Capture":
@@ -334,6 +374,7 @@ class Capture:
             self._graph_mode = False
             self._registry = {}
             self._pending_inputs = []
+            self._pending_outputs = []
         return self
 
     def _set_graph_context(self, batch):
@@ -362,17 +403,26 @@ class Capture:
                        if r.exec_order >= 0 and r.name != self.root_name),
                       key=lambda r: r.exec_order)
 
-    def leaf_edges(self) -> List[Tuple[str, str]]:
-        """Dataflow edges between *leaf* modules. Container-level edges are
+    def graph_nodes(self) -> List[str]:
+        """Names of the modules that are nodes of the dataflow graph: every
+        leaf plus every emitter container. The root is never a node."""
+        return [r.name for r in self.executed() if r.is_node]
+
+    def graph_edges(self) -> List[Tuple[str, str]]:
+        """Dataflow edges between graph nodes. Container-level edges are
         derived by projecting these onto ancestors (never onto the root)."""
+        nodes = set(self.graph_nodes())
         edges = set()
         for r in self.records.values():
-            if r.name == self.root_name or not r.is_leaf:
+            if r.name not in nodes:
                 continue
             for p in r.producers:
-                if p != r.name and p != self.root_name and self.records[p].is_leaf:
+                if p != r.name and p in nodes:
                     edges.add((p, r.name))
         return sorted(edges)
+
+    def leaf_edges(self) -> List[Tuple[str, str]]:   # backwards-compatible name
+        return self.graph_edges()
 
 
 # ----------------------------------------------------------------------------
