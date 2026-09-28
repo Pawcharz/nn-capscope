@@ -133,9 +133,11 @@ def weight_spectrum(W: torch.Tensor, max_sv: int = 256) -> Dict:
     }
 
 
-def alpha_reading(alpha: float) -> str:
+def alpha_reading(alpha: float, n_eigs: Optional[int] = None, min_rank: int = 20) -> str:
     if alpha is None or not np.isfinite(alpha):
         return "n/a"
+    if n_eigs is not None and n_eigs < min_rank:
+        return f"not reliable ({n_eigs} eigenvalues)"
     if alpha > 6:
         return "undertrained"
     if alpha < 2:

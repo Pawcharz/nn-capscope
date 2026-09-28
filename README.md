@@ -93,7 +93,7 @@ First match wins:
 | `passthrough` | leaf with no parameters (ReLU, Dropout…); points at the module feeding it |
 | `oversmoothed` | Dirichlet energy < 0.05 **and** < 30 % of the nearest upstream graph layer |
 | `upstream` | its used rank is within 10 % of the upstream *carry* (the narrowest point along the paths feeding it): it uses everything that arrives, so the limit is earlier |
-| `undertrained` | alpha > 6 |
+| `undertrained` | alpha > 6, on a weight with at least 20 eigenvalues (`alpha_min_rank`) |
 | `redundant` | > 35 % dead or duplicate units, or CKA > 0.98 with a module that is neither a relative nor downstream |
 | `saturated` / `tight` / `spare` | used rank > 85 % / > 60 % / otherwise of the width |
 

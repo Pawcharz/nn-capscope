@@ -82,10 +82,13 @@ def inspect(
 
     # ---- truncation sweep ----
     base_loss = None
+    base_spread = None
     if loss_fn is not None and batches:
         sb = batches[: (sweep_batches or min(len(batches), 4))]
-        base_loss = _eval_loss(model, sb, forward_fn, loss_fn)
-        log(f"[capscope] base loss {base_loss:.5f}; sweeping ranks")
+        per_batch = [_eval_loss(model, [b], forward_fn, loss_fn) for b in sb]
+        base_loss = float(np.mean(per_batch))
+        base_spread = (float(np.std(per_batch) / abs(base_loss)) if base_loss else None)
+        log(f"[capscope] base loss {base_loss:.5f} (batch-to-batch spread ±{100 * (base_spread or 0):.1f}%); sweeping ranks")
         for n, m in mods.items():
             if not m["has_matrix"]:
                 continue
@@ -108,6 +111,8 @@ def inspect(
         "has_loss": loss_fn is not None,
         "has_graph": edge_index_fn is not None,
         "base_loss": base_loss,
+        "base_loss_spread": base_spread,
+        "n_sweep_batches": (len(sb) if (loss_fn is not None and batches) else 0),
         "thresholds": {**THRESH, **(thresholds or {})},
         "headline": headline,
     }
@@ -181,7 +186,7 @@ def _build_modules(model: nn.Module, cap: Optional[Capture]) -> Dict[str, dict]:
         m["weights"] = [{"name": (n if not r.is_leaf else n), **weight_spectrum(p)} for n, p in wp]
         alphas = [w["alpha"] for w in m["weights"] if math.isfinite(w["alpha"])]
         m["alpha"] = float(np.median(alphas)) if alphas else None
-        m["alpha_reading"] = alpha_reading(m["alpha"]) if m["alpha"] is not None else "n/a"
+        m["alpha_reading"] = "n/a"   # filled in once the rank cap is known (needs the matrix size)
         m["max_weight_rank"] = None
         m["rank_cap"] = None
         if m["width"] is None and m["weights"] and r.is_leaf:
@@ -217,6 +222,10 @@ def _assign_rank_caps(mods: Dict[str, dict]) -> None:
         binding = min(pool, key=lambda w: w["max_rank"])
         m["max_weight_rank"] = binding["max_rank"]
         m["rank_cap"] = binding["rank_cap"]
+    for m in mods.values():
+        if m.get("alpha") is not None:
+            n_eigs = max((w["max_rank"] for w in m["weights"]), default=None)
+            m["alpha_reading"] = alpha_reading(m["alpha"], n_eigs, THRESH["alpha_min_rank"])
 
 
 def _hierarchy(model: nn.Module, mods: Dict[str, dict]) -> List[dict]:

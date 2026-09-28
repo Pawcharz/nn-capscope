@@ -41,8 +41,9 @@ def main(src: str, dst: str) -> None:
             parts.append("=== READING (header line) ===\n" + page.locator("#headline").inner_text())
         names = rep.cka.get("names") or []
         Mx = rep.cka.get("matrix") or []
+        from capscope.capture import is_relative
         pairs = sorted(((Mx[i][j], names[i], names[j]) for i in range(len(names)) for j in range(i + 1, len(names))
-                        if Mx[i][j] is not None), reverse=True)
+                        if Mx[i][j] is not None and not is_relative(names[i], names[j])), reverse=True)
         parts.append("=== CKA HEATMAP (the similarity view, as the 40 most similar pairs) ===\n"
                      + "\n".join(f"{v:.3f}  {a}  ~  {b}" for v, a, b in pairs[:40]))
         page.locator("#moveDetail").click()
