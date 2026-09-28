@@ -265,8 +265,9 @@ def _headline(mods: Dict[str, dict], has_loss: bool) -> List[str]:
         if press and max(press) < 0.05:
             out.append(f"None of them is under pressure: losing their last used direction costs at most "
                        f"+{100 * max(press):.0f}% loss (the tolerance itself is 1%). The loss is not pressing "
-                       "on any module's width; look at the input features, the data, the optimisation or "
-                       "head conflict before adding width.")
+                       "on any module's width. Before adding width, look at the input features (the one of these "
+                       "the tool measures, via the rank cap and carry), the data, the optimisation, or head "
+                       "conflict (which it does not).")
         elif press:
             hot = [m for m in cands if (m.get("pressure") or 0) >= 0.05]
             names = ", ".join(f"{m['name']} (+{100 * m['pressure']:.0f}%)" for m in sorted(hot, key=lambda m: -m["pressure"])[:4])

@@ -106,6 +106,14 @@ def test_no_undertrained_warning_on_converged_model(report):
     assert not any("UNDERTRAINED" in w or "undertrained" in w for w in report.warnings), report.warnings
 
 
+def test_conservative_used_rank(report):
+    for m in report.modules:
+        sw = m.get("sweep")
+        if sw:
+            assert sw["used_rank_safe"] >= sw["used_rank"], m["name"]
+            assert all(l <= sw["threshold"] for k, l in zip(sw["ks"], sw["losses"]) if k >= sw["used_rank_safe"]), m["name"]
+
+
 def test_dirichlet_reference_is_never_own_child(report):
     for m in report.modules:
         ref = m.get("dirichlet_ref")

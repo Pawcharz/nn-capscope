@@ -121,6 +121,9 @@ def truncation_sweep(
         "base_loss": float(base_loss),
         "threshold": float(thresh),
         "used_rank": int(used),
+        # conservative reading: one above the largest evaluated rank that was still
+        # over tolerance, so a non-monotone dip below the threshold does not count
+        "used_rank_safe": int(max([k for k in ks if curve[k] > thresh], default=0) + 1),
         "max_rank": int(rmax),
         "rel_tol": rel_tol,
         "loss_at_1": float(curve.get(1, float("nan"))),

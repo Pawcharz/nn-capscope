@@ -311,7 +311,7 @@ function execOf(name) {
 // ---------------------------------------------------------------------------
 document.getElementById('meta').textContent =
   `${DATA.meta.model} · ${fmtParams(DATA.meta.n_params)} params · ${DATA.modules.length} modules · ${EDGES.length} edges` +
-  (DATA.meta.base_loss !== null && DATA.meta.base_loss !== undefined ? ` · base loss ${DATA.meta.base_loss.toFixed(4)}` : '');
+  (DATA.meta.base_loss !== null && DATA.meta.base_loss !== undefined ? ` · base loss ${DATA.meta.base_loss.toFixed(4)} (loss_fn on the first ${DATA.meta.n_sweep_batches || '?'} batches of the loader you passed)` : '');
 const wb = document.getElementById('warnbox');
 if (DATA.warnings && DATA.warnings.length) { wb.classList.add('show'); wb.innerHTML = DATA.warnings.map(w => '<div>⚠ ' + esc(w) + '</div>').join(''); }
 const hl = document.getElementById('headline');
@@ -499,7 +499,7 @@ function renderList() {
       <td class="name" title="${esc(m.name)} (${esc(m.type)})">${m.is_leaf ? '' : '<span style="color:#64748b">▸</span> '}${esc(m.name)}</td>
       <td><span class="pill" style="background:${col}">${m.verdict}</span></td>
       <td class="num">${m.priority.toFixed(2)}</td>
-      <td><span class="bar" title="${m.used_rank ?? '–'} of ${m.width ?? '–'} dims"><i style="width:${Math.round(100 * (m.used_frac || 0))}%;background:${col}"></i></span><span class="srtext">${m.used_rank ?? '–'}/${m.width ?? '–'}${m.pressure !== null && m.pressure !== undefined ? ` +${Math.round(100 * m.pressure)}%` : ''}${m.rank_cap === 'input' ? ' input-capped' : ''}</span></td>
+      <td><span class="bar" title="${m.used_rank ?? '–'} of ${m.width ?? '–'} dims (${m.used_rank_source})" style="${m.used_rank_source === 'truncation sweep' ? '' : 'opacity:.55'}"><i style="width:${Math.round(100 * (m.used_frac || 0))}%;background:${col}"></i></span><span class="srtext">${m.used_rank_source === 'truncation sweep' ? '' : '≈'}${m.used_rank ?? '–'}/${m.width ?? '–'}${m.used_rank_source === 'truncation sweep' ? '' : ' (activation estimate, no sweep)'}${m.pressure !== null && m.pressure !== undefined ? ` +${Math.round(100 * m.pressure)}%` : ''}${m.rank_cap === 'input' ? ' input-capped' : ''}</span></td>
       <td class="num">${fmtParams(m.n_params_total)}</td></tr>`;
   });
   html += '</tbody></table>';
@@ -600,7 +600,8 @@ function sweepTable(sw) {
   sw.ks.forEach((k, i) => { const l = sw.losses[i]; const ok = l <= sw.threshold; t += `<tr class="${k === sw.used_rank ? 'used' : ''}"><td>${k}</td><td>${l.toPrecision(5)}</td><td>${((l / sw.base_loss - 1) * 100).toFixed(1)}%</td><td class="${ok ? 'ok' : 'no'}">${ok ? 'within tol' : 'over'}</td></tr>`; });
   return `<div class="hint">Every (k, loss) the sweep evaluated: the log grid plus the bisection steps. The used rank is the smallest k within tolerance.</div>${t}</table>`;
 }
-function chartAlpha(alpha, weights) {
+function chartAlpha(alpha, weights, reading) {
+  const unreliable = reading && reading.startsWith('not reliable');
   const w = 400, h = 84; const x0 = 20, x1 = w - 20, y = 46;
   const xs = scaleLin(0, 10, x0, x1);
   const zone = (a, b, col, label) => `<rect x="${xs(a)}" y="${y}" width="${xs(b) - xs(a)}" height="14" fill="${col}" opacity=".55"/><text x="${(xs(a) + xs(b)) / 2}" y="${y + 26}" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="var(--mono)">${label}</text>`;
@@ -609,7 +610,7 @@ function chartAlpha(alpha, weights) {
   s += zone(0, 2, '#ec4899', '< 2 over-trained') + zone(2, 6, '#22c55e', '2–6 well conditioned') + zone(6, 10, '#a855f7', '> 6 undertrained (≈ random)');
   [2, 6].forEach(v => { s += `<line x1="${xs(v)}" y1="${y - 4}" x2="${xs(v)}" y2="${y + 18}" stroke="#e5e7eb"/><text x="${xs(v)}" y="${y - 6}" text-anchor="middle" font-size="9" fill="#e5e7eb" font-family="var(--mono)">${v}</text>`; });
   (weights || []).forEach(wt => { if (wt.alpha !== null && wt.alpha !== undefined && Number.isFinite(wt.alpha)) { const x = xs(Math.min(10, wt.alpha)); s += `<circle cx="${x}" cy="${y + 7}" r="3" fill="#e5e7eb" opacity=".6"><title>${esc(wt.name)} α=${wt.alpha.toFixed(2)}</title></circle>`; } });
-  if (alpha !== null && alpha !== undefined && Number.isFinite(alpha)) { const x = xs(Math.min(10, alpha)); s += `<path d="M${x},${y - 3} L${x - 5},${y - 12} L${x + 5},${y - 12} Z" fill="#fbbf24"/><text x="${x}" y="${y - 14}" text-anchor="middle" font-size="10" fill="#fbbf24" font-family="var(--mono)">α = ${alpha.toFixed(2)}${alpha > 10 ? ' (off scale)' : ''}</text>`; }
+  if (alpha !== null && alpha !== undefined && Number.isFinite(alpha)) { const x = xs(Math.min(10, alpha)); const c = unreliable ? '#64748b' : '#fbbf24'; s += `<path d="M${x},${y - 3} L${x - 5},${y - 12} L${x + 5},${y - 12} Z" fill="${c}"/><text x="${x}" y="${y - 14}" text-anchor="middle" font-size="10" fill="${c}" font-family="var(--mono)">α = ${alpha.toFixed(2)}${alpha > 10 ? ' (off scale)' : ''}${unreliable ? ' · ' + esc(reading) + ': the zones do not apply' : ''}</text>`; }
   else s += `<text x="${(x0 + x1) / 2}" y="${y - 8}" text-anchor="middle" font-size="10" fill="#64748b">no matrix weights</text>`;
   return `<div class="chart">${s}</svg></div>`;
 }
@@ -690,7 +691,8 @@ function renderDetail() {
       ${cell('noise: base-loss spread across sweep batches', has(DATA.meta.base_loss_spread) ? `±${(100 * DATA.meta.base_loss_spread).toFixed(1)}% (std over ${DATA.meta.n_sweep_batches} batches)` : '–', 'std of the base loss over the individual sweep batches, relative to their mean. The (k, loss) table itself is deterministic (same batches, same weights at every k), so it has no sampling noise; this number says how much the loss depends on which data was used, i.e. how far used rank could move on different batches. Large spread with a 1% tolerance means used rank is a property of these batches as much as of the model')}
       ${cell('loss at rank 1', has(sw.loss_at_1) ? sw.loss_at_1.toPrecision(4) : '–', 'loss when every weight is cut to a single SVD direction; near the base loss on every module = undertrained checkpoint')}
       ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–', 'relative loss increase when truncated to used rank − 1 directions (≥ 1% by construction); feeds the growth priority')}
-      ${cell('loss at half the used rank', (() => { const half = Math.max(1, Math.floor(sw.used_rank / 2)); let bi = -1; sw.ks.forEach((k, i) => { if (k <= half) bi = i; }); return bi < 0 ? '–' : `${sw.losses[bi].toPrecision(4)} at k=${sw.ks[bi]} (+${((sw.losses[bi] / sw.base_loss - 1) * 100).toFixed(0)}%)`; })(), 'how steep the curve is left of the marker: the loss at the largest swept rank ≤ used/2')}
+      ${cell('conservative used rank', has(sw.used_rank_safe) ? `${sw.used_rank_safe} / ${sw.max_rank}${sw.used_rank_safe !== sw.used_rank ? ` (vs ${sw.used_rank})` : ''}` : '–', 'one above the largest evaluated rank that was still over tolerance. Ignores non-monotone dips: if k=61 passed but k=70 failed, this says 71. When it differs from used rank, the curve wobbles near the threshold and the width decision should use this one')}
+      ${cell('loss at half the used rank', (() => { if (sw.used_rank < 4) return '– (used rank too small)'; const half = Math.max(1, Math.floor(sw.used_rank / 2)); let bi = -1; sw.ks.forEach((k, i) => { if (k <= half) bi = i; }); return bi < 0 ? '–' : `${sw.losses[bi].toPrecision(4)} at k=${sw.ks[bi]} (+${((sw.losses[bi] / sw.base_loss - 1) * 100).toFixed(0)}%)`; })(), 'how steep the curve is left of the marker: the loss at the largest swept rank ≤ used/2')}
     </div>` : ''}${chartSweep(sw)}${sw ? sweepTable(sw) : ''}`, true);
 
   // 4. weight spectra / alpha
@@ -702,7 +704,7 @@ function renderDetail() {
       ${cell('matrix weights', wts.length ? wts.map(w => `${esc(w.name)} [${w.shape.join('×')}]`).join(', ') : '–', 'every ≥2-D parameter inside the module, as [out × in]; convolutions are flattened')}
       ${cell('binding weight', m.rank_cap ? `${esc(m.rank_cap)}-capped at ${m.max_weight_rank}` : '–', 'the weight producing this module\'s output, and which side bounds its rank')}
     </div>
-    ${chartAlpha(m.alpha, wts)}
+    ${chartAlpha(m.alpha, wts, m.alpha_reading)}
     ${wts.length ? `<div class="charts2">${wts.slice(0, 2).map(wt => chartSpectrum(`Weight σ · ${wt.name} [${wt.shape.join('×')}]`, wt.singular_values, '#a78bfa', sw ? [{ k: sw.used_rank, color: '#f59e0b', label: 'used' }] : [])).join('')}</div>${wts.length > 2 ? `<div class="hint">${wts.length - 2} more weight matrices not shown.</div>` : ''}` : ''}`);
 
   // 5. graph / oversmoothing (only when graph metrics exist for this run)
