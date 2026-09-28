@@ -147,7 +147,9 @@ saved HTML works offline.
   variance-explained curve, truncation sweep, weight spectrum with the alpha
   gauge, graph oversmoothing, redundancy with the histogram and nearest CKA
   neighbours, dataflow). Each section's "?" opens the guide at that
-  section; open/closed state is remembered. **Panel below**
+  section; sections drag to reorder, and open/closed state and order are
+  remembered. Charts show a crosshair with exact values on hover. **Panel below**
+  also embeds each guide section's text under its section. **Panel below**
   moves it under the graph as a full-width section (the page then scrolls);
   both sidebars are resizable by dragging their gutters. Layout choices are
   remembered in the browser.

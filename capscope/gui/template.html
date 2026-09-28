@@ -46,13 +46,14 @@ aside, section { min-height: 0; overflow: hidden; }
 .gutter:hover::after, body.resizing .gutter::after { background: var(--accent); }
 body.resizing { cursor: col-resize; user-select: none; }
 /* detail panel moved below the graph: the page scrolls, the panel spans the width */
-#below { display: none; border-top: 1px solid var(--line); background: var(--panel); }
+#below { display: none; border-top: 1px solid var(--line); background: var(--panel); overflow: visible; min-height: 0; }
 body.below { overflow: auto; }
-body.below #app { height: auto; min-height: 100vh; grid-template-rows: 48px auto minmax(360px, 62vh) auto; }
+body.below #app { height: auto; min-height: 100vh; grid-template-rows: 48px auto minmax(360px, 58vh) auto; }
+html.below, body.below { height: auto; }
 body.below main { grid-template-columns: var(--leftw, 340px) 6px 1fr; }
 body.below #gutR { display: none; }
 body.below #below { display: block; }
-body.below #right { border-left: 0; overflow: visible; max-width: 1500px; margin: 0 auto; padding: 14px 24px 60px; }
+body.below #right { border-left: 0; overflow: visible; max-width: none; margin: 0; padding: 14px 24px 80px; }
 body.below #right .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 body.below #right .charts2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 body.below #right .chart svg { max-height: 260px; margin: 0 auto; }
@@ -91,6 +92,7 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
 .grid .k { color: var(--dim); font-size: 11px; }
 .grid .v { font-family: var(--mono); font-size: 12px; }
 .grid .cell { padding: 4px 6px; background: #0f1522; border-radius: 4px; }
+.grid .d { color: var(--dim); font-size: 10px; line-height: 1.3; margin-top: 2px; }
 #right h3 { font-size: 12px; color: var(--muted); margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .6px; }
 .sec { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; background: #0d1320; }
 .sec > .sech { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; user-select: none; }
@@ -105,9 +107,44 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
 .sec.closed > .secb { display: none; }
 .sec .grid { margin-bottom: 6px; }
 .sec .chart { margin-bottom: 4px; }
-body.below #right .secs { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 10px; align-items: start; }
-body.below #right .sec { margin: 0; }
-body.below #right .sec.wide { grid-column: 1 / -1; }
+/* panel below: equal-width cards in a fixed column grid, draggable to reorder */
+body.below #right .secs { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 12px; align-items: start; }
+body.below #right .sec { margin: 0; min-width: 0; }
+body.below #right .sec.wide { grid-column: span 2; }
+body.below #right .sec .charts2 { grid-template-columns: 1fr 1fr; }
+body.below #right .sec.wide .charts2 { grid-template-columns: 1fr 1fr; }
+body.below #right .sec .grid { grid-template-columns: 1fr 1fr; }
+body.below #right .sec.wide .grid { grid-template-columns: repeat(4, 1fr); }
+body.below #right .chart svg { max-height: 300px; margin: 0 auto; }
+body.below #right .sec.wide .chart svg { max-height: 340px; }
+@media (max-width: 1000px) { body.below #right .secs { --cols: 1; } body.below #right .sec.wide { grid-column: auto; } }
+.sec > .sech .grip { color: var(--dim); cursor: grab; font-size: 13px; letter-spacing: -2px; flex: none; padding: 0 2px; }
+.sec.dragging { opacity: .4; }
+.sec.dropbefore { box-shadow: -3px 0 0 var(--accent); }
+.sec.dropafter { box-shadow: 3px 0 0 var(--accent); }
+.sec.dropbefore.col, .sec.dropafter.col { box-shadow: none; }
+.sec.dropbefore.col { box-shadow: 0 -3px 0 var(--accent); }
+.sec.dropafter.col { box-shadow: 0 3px 0 var(--accent); }
+#secTools { display: flex; gap: 6px; align-items: center; margin: 2px 0 8px; color: var(--dim); font-size: 11px; }
+/* guide text embedded in each section (panel-below mode only) */
+.explain { display: none; margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+body.below .explain { display: block; }
+.explain summary { cursor: pointer; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; user-select: none; }
+.explain summary:hover { color: var(--accent); }
+.explain p { margin: 6px 0; }
+.explain table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 6px 0; }
+.explain th { text-align: left; color: var(--dim); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line2); }
+.explain td { padding: 4px 6px; border-bottom: 1px solid #1a2233; vertical-align: top; }
+.explain code, .explain pre { font-family: var(--mono); font-size: 11.5px; background: #0f1522; border-radius: 4px; }
+.explain code { padding: 0 3px; }
+.explain pre { padding: 6px 10px; overflow-x: auto; }
+.explain ul, .explain ol { padding-left: 20px; margin: 4px 0; }
+#secTools button { padding: 2px 8px; font-size: 11px; }
+/* chart hover */
+.chart svg { cursor: crosshair; }
+.chart .xh { stroke: #e5e7eb; stroke-width: .8; stroke-dasharray: 2 2; opacity: 0; pointer-events: none; }
+.chart .xm { fill: #fbbf24; opacity: 0; pointer-events: none; }
+.chart .hoverpad { fill: transparent; }
 .chart { background: #0f1522; border-radius: 6px; padding: 4px; margin-bottom: 6px; }
 .chart svg { display: block; width: 100%; height: auto; }
 .charts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -514,7 +551,8 @@ function chartSpectrum(title, sv, color, markers) {
   let mk = '';
   (markers || []).forEach((m, mi) => { if (m.k >= 1 && m.k <= sv.length) { const right = xs(m.k) > (F.x0 + F.x1) / 2; mk += `<line x1="${xs(m.k)}" y1="${F.y0}" x2="${xs(m.k)}" y2="${F.y1}" stroke="${m.color}" stroke-dasharray="3 3"/><text x="${xs(m.k) + (right ? -2 : 2)}" y="${F.y0 + 9 + 10 * mi}" text-anchor="${right ? 'end' : 'start'}" font-size="9" fill="${m.color}" font-family="var(--mono)">${esc(m.label)}</text>`; } });
   const xt = niceTicks(1, sv.length, 4).filter(v => v >= 1);
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}">${titleText(F, title)}${axes(F, xt, xs, logTicks(ymin, ymax), ys, 'index', 'σ (log)')}<path d="${path}" fill="none" stroke="${color}" stroke-width="1.6"/>${mk}</svg></div>`;
+  const data = chartData(F, sv.map((_, i) => i + 1), sv, 'lin', 'log', 'spectrum', { xdom: [1, sv.length], ydom: [ymin, ymax] });
+  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" data-chart="${data}">${titleText(F, title)}${axes(F, xt, xs, logTicks(ymin, ymax), ys, 'index', 'σ (log)')}<path d="${path}" fill="none" stroke="${color}" stroke-width="1.6"/>${mk}${hoverLayer(F)}</svg></div>`;
 }
 function chartCumVar(rank) {
   if (!rank || !rank.cum_var || !rank.cum_var.length) return '<div class="chart"><div class="empty">Variance explained: n/a</div></div>';
@@ -522,7 +560,8 @@ function chartCumVar(rank) {
   const xs = scaleLin(0, cv.length, F.x0, F.x1), ys = scaleLin(0, 1, F.y1, F.y0);
   let path = `M${xs(0)},${ys(0)}`; cv.forEach((v, i) => { path += `L${xs(i + 1).toFixed(1)},${ys(v).toFixed(1)}`; });
   const lvl = (p, k, col) => `<line x1="${F.x0}" y1="${ys(p)}" x2="${F.x1}" y2="${ys(p)}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><line x1="${xs(k)}" y1="${ys(p)}" x2="${xs(k)}" y2="${F.y1}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><text x="${xs(k) + 2}" y="${ys(p) - 2}" font-size="9" fill="${col}" font-family="var(--mono)">${Math.round(p * 100)}% @ ${k}</text>`;
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}">${titleText(F, 'Variance explained')}${axes(F, niceTicks(0, cv.length, 4), xs, [0, .5, 1], ys, 'rank', 'cum. var')}<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>${lvl(0.9, rank.rank90, '#f59e0b')}${lvl(0.99, rank.rank99, '#ef4444')}</svg></div>`;
+  const data = chartData(F, cv.map((_, i) => i + 1), cv, 'lin', 'lin', 'cum', { xdom: [0, cv.length], ydom: [0, 1] });
+  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" data-chart="${data}">${titleText(F, 'Variance explained')}${axes(F, niceTicks(0, cv.length, 4), xs, [0, .5, 1], ys, 'rank', 'cum. var')}<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>${lvl(0.9, rank.rank90, '#f59e0b')}${lvl(0.99, rank.rank99, '#ef4444')}${hoverLayer(F)}</svg></div>`;
 }
 function chartSweep(sw) {
   if (!sw) return `<div class="chart"><div class="empty">Loss under truncation: n/a (pass loss_fn to enable the sweep)</div></div>`;
@@ -540,7 +579,8 @@ function chartSweep(sw) {
   const used = `<line x1="${ux}" y1="${F.y0}" x2="${ux}" y2="${F.y1}" stroke="#f59e0b" stroke-dasharray="3 3"/><text x="${ux + (uright ? -3 : 3)}" y="${F.y0 + 9}" text-anchor="${uright ? 'end' : 'start'}" font-size="9" fill="#f59e0b" font-family="var(--mono)">used rank ${sw.used_rank} / ${sw.max_rank}${sw.pressure !== null && sw.pressure !== undefined ? ` · −1 dim = +${Math.round(sw.pressure * 100)}% loss` : ''}</text>`;
   const yt = useLog ? logTicks(lo / 1.15, hi * 1.15) : niceTicks(lo, hi, 4);
   const xt = logTicks(1, sw.max_rank); if (xt.indexOf(sw.max_rank) < 0) xt.push(sw.max_rank);
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}">${titleText(F, `Loss under SVD truncation (lower k = harsher${useLog ? ', log scale' : ''})`)}${axes(F, xt, xs, yt, ys, 'rank k (log)', 'loss')}${band}${base}<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>${pts}${used}</svg></div>`;
+  const data = chartData(F, ks, ls, 'log', useLog ? 'log' : 'lin', 'sweep', { xdom: [1, Math.max(2, sw.max_rank)], ydom: useLog ? [lo / 1.15, hi * 1.15] : [lo - (hi - lo) * 0.05, hi + Math.max(1e-9, hi - lo) * 0.05], base: sw.base_loss, thr: sw.threshold });
+  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" data-chart="${data}">${titleText(F, `Loss under SVD truncation (lower k = harsher${useLog ? ', log scale' : ''})`)}${axes(F, xt, xs, yt, ys, 'rank k (log)', 'loss')}${band}${base}<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>${pts}${used}${hoverLayer(F)}</svg></div>`;
 }
 function chartAlpha(alpha, weights) {
   const w = 400, h = 84; const x0 = 20, x1 = w - 20, y = 46;
@@ -563,14 +603,16 @@ function chartHist(hist) {
   let bars = '';
   c.forEach((v, i) => { const x = xs(e[i]), x2 = xs(e[i + 1]); bars += `<rect x="${x}" y="${ys(v)}" width="${Math.max(0.5, x2 - x - 0.5)}" height="${F.y1 - ys(v)}" fill="#60a5fa" opacity=".8"><title>[${e[i].toPrecision(3)}, ${e[i + 1].toPrecision(3)}): ${v}</title></rect>`; });
   const zero = (e[0] < 0 && e[e.length - 1] > 0) ? `<line x1="${xs(0)}" y1="${F.y0}" x2="${xs(0)}" y2="${F.y1}" stroke="#94a3b8" stroke-dasharray="2 3"/>` : '';
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}">${titleText(F, `Activation histogram · mean ${fmt(hist.mean, 3)} · std ${fmt(hist.std, 3)} · zeros ${pct(hist.zero_frac)}`)}${axes(F, niceTicks(e[0], e[e.length - 1], 5), xs, niceTicks(0, cmax, 3), ys, 'value', 'count')}${bars}${zero}</svg></div>`;
+  const mids = c.map((_, i) => (e[i] + e[i + 1]) / 2); const total = c.reduce((a, b) => a + b, 0);
+  const data = chartData(F, mids, c, 'lin', 'lin', 'hist', { xdom: [e[0], e[e.length - 1]], ydom: [0, cmax], edges: e, total });
+  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" data-chart="${data}">${titleText(F, `Activation histogram · mean ${fmt(hist.mean, 3)} · std ${fmt(hist.std, 3)} · zeros ${pct(hist.zero_frac)}`)}${axes(F, niceTicks(e[0], e[e.length - 1], 5), xs, niceTicks(0, cmax, 3), ys, 'value', 'count')}${bars}${zero}${hoverLayer(F)}</svg></div>`;
 }
 
 // ---------------------------------------------------------------------------
 // detail panel
 // ---------------------------------------------------------------------------
 const right = document.getElementById('right');
-function cell(k, v, title) { return `<div class="cell" ${title ? `title="${esc(title)}"` : ''}><div class="k">${esc(k)}</div><div class="v">${v}</div></div>`; }
+function cell(k, v, desc) { return `<div class="cell"><div class="k">${esc(k)}</div><div class="v">${v}</div>${desc ? `<div class="d">${esc(desc)}</div>` : ''}</div>`; }
 function renderDetail() {
   const m = M[state.selected];
   if (!m) {
@@ -583,72 +625,74 @@ function renderDetail() {
   const kind = m.is_leaf ? 'leaf' : (m.emits ? 'container that computes its own output' : 'container');
   const has = v => v !== null && v !== undefined;
   const closed = prefs.closed || {};
-  const section = (id, title, guideId, summary, body, wide) =>
-    `<div class="sec ${closed[id] ? 'closed' : ''} ${wide ? 'wide' : ''}" data-sec="${id}">
-      <div class="sech"><span class="tri">▼</span><h3>${esc(title)}</h3><span class="sum">${summary || ''}</span><span class="help" data-guide="${guideId}" title="Open the guide at this section">?</span></div>
-      <div class="secb">${body}</div></div>`;
+  const secs = [];
+  const section = (id, title, guideId, summary, body, wide) => secs.push({ id, html:
+    `<div class="sec ${closed[id] ? 'closed' : ''} ${wide ? 'wide' : ''}" data-sec="${id}" draggable="true">
+      <div class="sech"><span class="grip" title="Drag to reorder">⋮⋮</span><span class="tri">▼</span><h3>${esc(title)}</h3><span class="sum">${summary || ''}</span><span class="help" data-guide="${guideId}" title="Open the guide at this section">?</span></div>
+      <div class="secb">${body}${explain(guideId)}</div></div>` });
   let html = `<h2>${esc(m.name)}</h2>
     <div class="sub">${esc(m.type)} · ${kind} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
-    <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div><div class="secs">`;
+    <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div>
+    <div id="secTools"><span>sections:</span><button data-secs="open">open all</button><button data-secs="close">close all</button><button data-secs="reset">reset order</button><span style="flex:1"></span><span>drag ⋮⋮ to reorder · hover charts for values</span></div><div class="secs">`;
 
   // 1. capacity: the numbers the verdict is made from
-  html += section('capacity', 'Capacity verdict inputs', 'g-verdicts',
+  section('capacity', 'Capacity verdict inputs', 'g-verdicts',
     has(m.used_frac) ? `${m.used_rank}/${m.width} · ${pct(m.used_frac)}` : '',
     `<div class="grid">
-      ${cell('used rank', has(m.used_rank) ? `${m.used_rank} of ${m.width} (${pct(m.used_frac)})` : '–', m.used_rank_source)}
-      ${cell('marginal pressure', has(m.pressure) ? '+' + pct(m.pressure) + ' loss' : '–', 'relative loss increase when the module loses its single last used dimension (from the truncation sweep)')}
-      ${cell('weight rank cap', cap, 'input-capped: rank limited by the input width → widen upstream. output-capped / square: limited by this module\'s own width.')}
-      ${cell('upstream carry', fmt(m.carry), 'narrowest point along the paths feeding this module; "upstream" fires when used rank ≈ carry < width')}
-      ${cell('width (D) / input dim', `${fmt(m.width)} / ${fmt(m.in_dim)}`)}
-      ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–')}
-      ${cell('parameters (own / total)', `${fmtParams(m.n_params_own)} / ${fmtParams(m.n_params_total)}`)}
-      ${cell('rule that fired', esc(m.reason || '–'))}
+      ${cell('used rank', has(m.used_rank) ? `${m.used_rank} of ${m.width} (${pct(m.used_frac)})` : '–', `from the ${m.used_rank_source}: the smallest number of SVD directions of the weight the loss can live with (or, without a sweep, directions explaining 99% of activation variance). Saturated above 85% of width, tight above 60%`)}
+      ${cell('marginal pressure', has(m.pressure) ? '+' + pct(m.pressure) + ' loss' : '–', 'how much the loss rises (relative) when the weight is truncated to one SVD direction fewer than used rank')}
+      ${cell('weight rank cap', cap, 'the output-producing weight is [out × in]; its rank is at most min(in, out). input-capped (in < out): widen what feeds this module. output-capped or square: widen this module.')}
+      ${cell('upstream carry', fmt(m.carry), 'narrowest width along the dataflow paths feeding this module, propagated from the inputs; information cannot exceed it. "upstream" fires when used rank ≈ carry < width')}
+      ${cell('width (D) / input dim', `${fmt(m.width)} / ${fmt(m.in_dim)}`, 'output width is the denominator of "used %"; input dim is what the module receives')}
+      ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–', 'shape of the output tensor on the first captured batch')}
+      ${cell('parameters (own / total)', `${fmtParams(m.n_params_own)} / ${fmtParams(m.n_params_total)}`, 'own = parameters declared on this module; total = including children')}
+      ${cell('rule that fired', esc(m.reason || '–'), 'the first verdict rule that matched, in the order narrow → passthrough → oversmoothed → upstream → undertrained → redundant → saturated → tight → spare')}
     </div>`);
 
   // 2. activation rank
-  html += section('rank', 'Rank and saturation (activations)', 'g-rank',
+  section('rank', 'Rank and saturation (activations)', 'g-rank',
     has(r.effective_rank) ? `eff ${fmt(r.effective_rank, 1)} · 99% @ ${fmt(r.rank99)}` : 'no activations',
     `<div class="grid">
-      ${cell('effective rank', fmt(r.effective_rank, 1), 'exp(H(σ/Σσ)) of the centred activations; inflated by nonlinearities')}
-      ${cell('stable rank', fmt(r.stable_rank, 1), 'Σσ²/σ_max²')}
-      ${cell('participation ratio', fmt(r.participation_ratio, 1))}
-      ${cell('numerical rank', fmt(r.numerical_rank), 'σ above float32 precision of σ_max')}
-      ${cell('rank @ 90% / 99% energy', `${fmt(r.rank90)} / ${fmt(r.rank99)}`)}
-      ${cell('rows sampled', fmt(r.n_rows))}
+      ${cell('effective rank', fmt(r.effective_rank, 1), 'take the singular values σ of the centred [N, D] activation matrix, normalise to sum 1, take the Shannon entropy H, report exp(H); inflated by nonlinearities')}
+      ${cell('stable rank', fmt(r.stable_rank, 1), 'Σσ² / σ_max² over the activation singular values; ignores the tail')}
+      ${cell('participation ratio', fmt(r.participation_ratio, 1), '(Σλ)² / Σλ² with λ = σ² of the activation matrix; agrees with effective rank on clean spectra, diverges on heavy tails')}
+      ${cell('numerical rank', fmt(r.numerical_rank), 'count of activation singular values above float32 precision of σ_max; a precision count, not a usage count')}
+      ${cell('rank @ 90% / 99% energy', `${fmt(r.rank90)} / ${fmt(r.rank99)}`, 'smallest number of leading singular directions whose σ² sum to 90% / 99% of the total activation variance')}
+      ${cell('rows sampled', fmt(r.n_rows), 'rows of the [N, D] activation matrix the SVD was taken on (a random subset across the captured batches)')}
     </div>
     <div class="charts2">${chartSpectrum('Activation singular values', r.singular_values, '#60a5fa', [{ k: r.rank90, color: '#f59e0b', label: '90%' }, { k: r.rank99, color: '#ef4444', label: '99%' }])}${chartCumVar(r)}</div>`);
 
   // 3. truncation sweep
   const sw = m.sweep;
-  html += section('sweep', 'Truncation sweep (loss)', 'g-sweep',
+  section('sweep', 'Truncation sweep (loss)', 'g-sweep',
     sw ? `used ${sw.used_rank} / ${sw.max_rank}` : (DATA.meta.has_loss ? 'no matrix weights' : 'no loss_fn'),
     `${sw ? `<div class="grid">
-      ${cell('used rank / max rank', `${sw.used_rank} / ${sw.max_rank}`, 'smallest k within rel_tol of the base loss; max rank = largest min(in, out) among the swept weights')}
-      ${cell('base loss / tolerance', `${sw.base_loss.toPrecision(4)} / +${Math.round(sw.rel_tol * 100)}%`)}
-      ${cell('loss at rank 1', has(sw.loss_at_1) ? sw.loss_at_1.toPrecision(4) : '–', 'what destroying the module costs; near base on every module = undertrained checkpoint')}
-      ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–')}
+      ${cell('used rank / max rank', `${sw.used_rank} / ${sw.max_rank}`, 'each weight replaced by its rank-k SVD approximation (top k singular values kept, rest zeroed), model re-run, loss read; used = smallest k within tolerance; max = full rank of the largest swept weight')}
+      ${cell('base loss / tolerance', `${sw.base_loss.toPrecision(4)} / +${Math.round(sw.rel_tol * 100)}%`, 'loss of the untouched model on the sweep batches; a rank k counts as enough if the truncated model stays within this tolerance of it')}
+      ${cell('loss at rank 1', has(sw.loss_at_1) ? sw.loss_at_1.toPrecision(4) : '–', 'loss when every weight is cut to a single SVD direction; near the base loss on every module = undertrained checkpoint')}
+      ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–', 'relative loss increase when truncated to used rank − 1 directions; feeds the growth priority')}
     </div>` : ''}${chartSweep(sw)}`, true);
 
   // 4. weight spectra / alpha
   const wts = m.weights || [];
-  html += section('alpha', 'Weight spectrum (alpha)', 'g-alpha',
+  section('alpha', 'Weight spectrum (alpha)', 'g-alpha',
     has(m.alpha) && Number.isFinite(m.alpha) ? `α ${m.alpha.toFixed(2)} · ${esc(m.alpha_reading || '')}` : 'no matrix weights',
     `<div class="grid">
-      ${cell('alpha (Hill, median over weights)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || 'n/a')}`, '> 6 undertrained (≈ random init), 2–6 well conditioned, < 2 over-trained')}
-      ${cell('matrix weights', wts.length ? wts.map(w => `${esc(w.name)} [${w.shape.join('×')}]`).join(', ') : '–')}
-      ${cell('binding weight', m.rank_cap ? `${esc(m.rank_cap)}-capped at ${m.max_weight_rank}` : '–', 'the weight producing this module\'s output')}
+      ${cell('alpha (Hill, median over weights)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || 'n/a')}`, 'Hill power-law fit to the top tenth of the eigenvalues of WᵀW (squared singular values of the weight); > 6 undertrained (≈ random init), 2–6 well conditioned, < 2 over-trained')}
+      ${cell('matrix weights', wts.length ? wts.map(w => `${esc(w.name)} [${w.shape.join('×')}]`).join(', ') : '–', 'every ≥2-D parameter inside the module, as [out × in]; convolutions are flattened')}
+      ${cell('binding weight', m.rank_cap ? `${esc(m.rank_cap)}-capped at ${m.max_weight_rank}` : '–', 'the weight producing this module\'s output, and which side bounds its rank')}
     </div>
     ${chartAlpha(m.alpha, wts)}
     ${wts.length ? `<div class="charts2">${wts.slice(0, 2).map(wt => chartSpectrum(`Weight σ · ${wt.name} [${wt.shape.join('×')}]`, wt.singular_values, '#a78bfa', sw ? [{ k: sw.used_rank, color: '#f59e0b', label: 'used' }] : [])).join('')}</div>${wts.length > 2 ? `<div class="hint">${wts.length - 2} more weight matrices not shown.</div>` : ''}` : ''}`);
 
   // 5. graph / oversmoothing (only when graph metrics exist for this run)
   if (DATA.meta.has_graph) {
-    html += section('graph', 'Graph: oversmoothing', 'g-graph',
+    section('graph', 'Graph: oversmoothing', 'g-graph',
       has(m.dirichlet) ? `dirichlet ${fmt(m.dirichlet, 3)}${m.dirichlet_ref ? ` · ${pct(m.dirichlet_ratio)} of upstream` : ''}` : 'not node-aligned',
       `<div class="grid">
-        ${cell('Dirichlet energy (centred)', has(m.dirichlet) ? fmt(m.dirichlet, 3) : '–', 'random ≈ 2, smoothed → 0')}
-        ${cell('vs nearest upstream graph layer', m.dirichlet_ref ? `${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)} (${fmt(M[m.dirichlet_ref] ? M[m.dirichlet_ref].dirichlet : null, 3)})` : '–', 'oversmoothed fires when energy < 0.05 and < 30% of this')}
-        ${cell('MAD (raw cosine)', fmt(m.mad, 3), 'collapses whenever features share a sign; corroboration only')}
+        ${cell('Dirichlet energy (centred)', has(m.dirichlet) ? fmt(m.dirichlet, 3) : '–', 'mean over edges of ‖xᵢ − xⱼ‖² over mean over nodes of ‖xᵢ − x̄‖², on centred node outputs; random ≈ 2, collapsed → 0')}
+        ${cell('vs nearest upstream graph layer', m.dirichlet_ref ? `${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)} (${fmt(M[m.dirichlet_ref] ? M[m.dirichlet_ref].dirichlet : null, 3)})` : '–', 'this module\'s Dirichlet energy as a fraction of the nearest upstream module that has one; oversmoothed fires when energy < 0.05 and this < 30%')}
+        ${cell('MAD (raw cosine)', fmt(m.mad, 3), 'mean cosine distance between each node and its neighbours, raw features; collapses whenever features share a sign, corroboration only')}
       </div>`);
   }
 
@@ -665,36 +709,126 @@ function renderDetail() {
       nbHtml += `<div class="nb" data-name="${esc(o.n)}"><span class="pill" style="background:${colorOf(M[o.n])};width:8px;height:8px;padding:0;border-radius:50%"></span><span class="n">${esc(o.n)}</span><span class="r">${rel}</span><span class="bar"><i style="width:${Math.round(100 * o.v)}%;background:${o.v > 0.98 ? '#ec4899' : '#60a5fa'}"></i></span><span class="val">${o.v.toFixed(3)}</span></div>`;
     });
   }
-  html += section('redundancy', 'Redundancy and unit health', 'g-redundancy',
+  section('redundancy', 'Redundancy and unit health', 'g-redundancy',
     has(red.redundant_frac) ? `${pct(red.redundant_frac)} dead/dup${m.cka_partner ? ` · CKA ${fmt(m.cka_partner_value, 2)}` : ''}` : '',
     `<div class="grid">
-      ${cell('dead units', `${fmt(red.dead)} (${pct(red.dead_frac)})`, 'variance below 1e-6 of the mean unit variance')}
-      ${cell('duplicate units', `${fmt(red.dup)} (${pct(red.dup_frac)})`, '|corr| > 0.95 with an earlier unit')}
-      ${cell('dead + duplicate', pct(red.redundant_frac), 'redundant fires above 35%')}
-      ${cell('best unrelated CKA', m.cka_partner ? `${fmt(m.cka_partner_value, 3)} · ${esc(m.cka_partner)}` : '–', 'relatives and downstream modules excluded; redundant fires above 0.98')}
+      ${cell('dead units', `${fmt(red.dead)} (${pct(red.dead_frac)})`, 'output units whose variance over the samples is below 1e-6 of the mean unit variance')}
+      ${cell('duplicate units', `${fmt(red.dup)} (${pct(red.dup_frac)})`, 'output units whose |correlation| with an earlier unit exceeds 0.95 over the samples')}
+      ${cell('dead + duplicate', pct(red.redundant_frac), 'share of the width that is dead or duplicated; redundant fires above 35%')}
+      ${cell('best unrelated CKA', m.cka_partner ? `${fmt(m.cka_partner_value, 3)} · ${esc(m.cka_partner)}` : '–', 'linear CKA ‖XᵀY‖² / (‖XᵀX‖ ‖YᵀY‖) with another module\'s activations on the same rows; relatives and downstream modules excluded; redundant fires above 0.98')}
     </div>
     ${chartHist(m.hist)}
     <h3>Nearest CKA neighbours</h3>${nbHtml}`);
 
   // 7. dataflow
-  html += section('dataflow', 'Dataflow', 'g-dataflow',
+  section('dataflow', 'Dataflow', 'g-dataflow',
     `${m.producers.length} in · ${m.consumers.length} out${m.is_sink ? ' · sink' : ''}`,
     `<div class="grid">
-      ${cell('fed by', m.producers.length ? m.producers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(input)')}
-      ${cell('feeds', m.consumers.length ? m.consumers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(output)')}
-      ${cell('node kind', kind)}
-      ${cell('execution order', `#${m.exec_order}${m.n_calls > 1 ? ` · ${m.n_calls} calls per batch` : ''}`)}
-      ${cell('activation range', `${fmt(m.hist && m.hist.edges.length ? m.hist.edges[0] : null, 2)} … ${fmt(m.hist && m.hist.edges.length ? m.hist.edges[m.hist.edges.length - 1] : null, 2)}`)}
+      ${cell('fed by', m.producers.length ? m.producers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(input)', 'modules whose outputs reach this module\'s inputs, recovered from the autograd graph')}
+      ${cell('feeds', m.consumers.length ? m.consumers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(output)', 'modules that consume this output; none = an output of the network')}
+      ${cell('node kind', kind, 'leaves and containers that compute their own output are graph nodes; other containers are projections of their children')}
+      ${cell('execution order', `#${m.exec_order}${m.n_calls > 1 ? ` · ${m.n_calls} calls per batch` : ''}`, 'position of the first forward call; the graph is laid out in this order')}
+      ${cell('activation range', `${fmt(m.hist && m.hist.edges.length ? m.hist.edges[0] : null, 2)} … ${fmt(m.hist && m.hist.edges.length ? m.hist.edges[m.hist.edges.length - 1] : null, 2)}`, 'min … max of the sampled output values')}
     </div>`);
-  html += '</div>';
+  const order = prefs.order || [];
+  secs.sort((a, b) => { const ia = order.indexOf(a.id), ib = order.indexOf(b.id); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+  html += secs.map(x => x.html).join('') + '</div>';
   right.innerHTML = html;
   right.scrollTop = 0;
 }
+// drag a section by its header to reorder; the order is remembered
+let dragSec = null;
+right.addEventListener('dragstart', ev => {
+  const sec = ev.target.closest('.sec'); if (!sec) return;
+  dragSec = sec; sec.classList.add('dragging'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', sec.getAttribute('data-sec'));
+});
+function dropSide(ev, sec) {
+  const r = sec.getBoundingClientRect();
+  const col = !document.body.classList.contains('below') || getComputedStyle(right.querySelector('.secs')).gridTemplateColumns.split(' ').length === 1;
+  const before = col ? (ev.clientY < r.top + r.height / 2) : (ev.clientX < r.left + r.width / 2);
+  return { before, col };
+}
+right.addEventListener('dragover', ev => {
+  const sec = ev.target.closest('.sec'); if (!dragSec || !sec || sec === dragSec) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+  const { before, col } = dropSide(ev, sec);
+  right.querySelectorAll('.sec').forEach(x => x.classList.remove('dropbefore', 'dropafter', 'col'));
+  sec.classList.add(before ? 'dropbefore' : 'dropafter'); if (col) sec.classList.add('col');
+});
+right.addEventListener('dragleave', ev => { const sec = ev.target.closest('.sec'); if (sec && !sec.contains(ev.relatedTarget)) sec.classList.remove('dropbefore', 'dropafter', 'col'); });
+right.addEventListener('drop', ev => {
+  const sec = ev.target.closest('.sec'); if (!dragSec || !sec || sec === dragSec) return;
+  ev.preventDefault();
+  const { before } = dropSide(ev, sec);
+  sec.parentElement.insertBefore(dragSec, before ? sec : sec.nextSibling);
+  prefs.order = [...right.querySelectorAll('.sec')].map(x => x.getAttribute('data-sec')); savePrefs();
+  right.querySelectorAll('.sec').forEach(x => x.classList.remove('dropbefore', 'dropafter', 'col'));
+});
+right.addEventListener('dragend', () => { if (dragSec) dragSec.classList.remove('dragging'); dragSec = null; right.querySelectorAll('.sec').forEach(x => x.classList.remove('dropbefore', 'dropafter', 'col')); });
+
+// chart hover: crosshair + live values, from the data each chart embeds
+function hoverLayer(F) { return `<line class="xh" x1="0" y1="${F.y0}" x2="0" y2="${F.y1}"/><circle class="xm" r="3"/><rect class="hoverpad" x="${F.x0}" y="${F.y0}" width="${F.x1 - F.x0}" height="${F.y1 - F.y0}"/>`; }
+function chartData(F, xs, ys, xscale, yscale, kind, extra) {
+  return esc(JSON.stringify({ F: { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1, w: F.w, h: F.h }, xs, ys, xscale, yscale, kind, ...(extra || {}) }));
+}
+right.addEventListener('mousemove', ev => {
+  const svgEl = ev.target.closest('svg[data-chart]');
+  if (!svgEl) { right.querySelectorAll('.xh, .xm').forEach(e => { e.style.opacity = 0; }); if (tip.dataset.chart) { tip.style.display = 'none'; delete tip.dataset.chart; } return; }
+  const d = JSON.parse(svgEl.getAttribute('data-chart'));
+  const r = svgEl.getBoundingClientRect(); const sc = Math.min(r.width / d.F.w, r.height / d.F.h); const vx = (ev.clientX - r.left - (r.width - d.F.w * sc) / 2) / sc;
+  const xsc = d.xscale === 'log' ? scaleLog(d.xdom[0], d.xdom[1], d.F.x0, d.F.x1) : scaleLin(d.xdom[0], d.xdom[1], d.F.x0, d.F.x1);
+  const ysc = d.yscale === 'log' ? scaleLog(d.ydom[0], d.ydom[1], d.F.y1, d.F.y0) : scaleLin(d.ydom[0], d.ydom[1], d.F.y1, d.F.y0);
+  let best = 0, bd = Infinity;
+  d.xs.forEach((x, i) => { const dx = Math.abs(xsc(x) - vx); if (dx < bd) { bd = dx; best = i; } });
+  const x = d.xs[best], y = d.ys[best];
+  const px = xsc(x), py = ysc(d.yscale === 'log' ? Math.max(y, d.ydom[0]) : y);
+  const xh = svgEl.querySelector('.xh'), xm = svgEl.querySelector('.xm');
+  if (xh) { xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.style.opacity = 1; }
+  if (xm) { xm.setAttribute('cx', px); xm.setAttribute('cy', py); xm.style.opacity = 1; }
+  let text;
+  if (d.kind === 'spectrum') text = `σ[${x}] = ${y.toPrecision(4)}\n${(100 * y / d.ys[0]).toFixed(2)}% of σ_max`;
+  else if (d.kind === 'cum') text = `rank ${x}\n${(100 * y).toFixed(2)}% variance explained`;
+  else if (d.kind === 'sweep') text = `rank k = ${x}\nloss ${y.toPrecision(5)}\n${((y / d.base - 1) * 100).toFixed(2)}% vs base${y <= d.thr ? '  (within tolerance)' : ''}`;
+  else if (d.kind === 'hist') text = `[${d.edges[best].toPrecision(3)}, ${d.edges[best + 1].toPrecision(3)})\ncount ${y}  (${(100 * y / d.total).toFixed(2)}%)`;
+  else text = `${x}: ${y}`;
+  tip.textContent = text; tip.dataset.chart = '1';
+  tip.style.display = 'block'; tip.style.left = (ev.clientX + 14) + 'px'; tip.style.top = (ev.clientY + 14) + 'px';
+});
+right.addEventListener('mouseleave', () => { if (tip.dataset.chart) { tip.style.display = 'none'; delete tip.dataset.chart; } });
+
+// the guide's text for one section: everything between its <h2 id> and the next <h2>
+const GUIDE_TEXT = {};
+(function () {
+  const body = document.querySelector('#guide .body'); if (!body) return;
+  let cur = null;
+  [...body.children].forEach(el => {
+    if (el.tagName === 'H2') { cur = el.id || null; if (cur) GUIDE_TEXT[cur] = ''; return; }
+    if (cur) GUIDE_TEXT[cur] += el.outerHTML;
+  });
+})();
+function explain(guideId) {
+  const t = GUIDE_TEXT[guideId]; if (!t) return '';
+  const open = !(prefs.explainClosed && prefs.explainClosed[guideId]);
+  return `<details class="explain" data-explain="${guideId}" ${open ? 'open' : ''}><summary>From the guide</summary>${t}</details>`;
+}
+right.addEventListener('toggle', ev => {
+  const d = ev.target; if (!d.classList || !d.classList.contains('explain')) return;
+  prefs.explainClosed = prefs.explainClosed || {}; prefs.explainClosed[d.getAttribute('data-explain')] = !d.open; savePrefs();
+}, true);
+
 right.addEventListener('click', ev => {
   const g = ev.target.closest('[data-guide]');
   if (g) { ev.stopPropagation(); showGuide(true, g.getAttribute('data-guide')); return; }
+  const tb = ev.target.closest('[data-secs]');
+  if (tb) {
+    const what = tb.getAttribute('data-secs');
+    if (what === 'reset') { delete prefs.order; savePrefs(); renderDetail(); return; }
+    prefs.closed = prefs.closed || {};
+    right.querySelectorAll('.sec').forEach(sec => { sec.classList.toggle('closed', what === 'close'); prefs.closed[sec.getAttribute('data-sec')] = what === 'close'; });
+    savePrefs(); return;
+  }
   const h = ev.target.closest('.sech');
-  if (h) { const sec = h.parentElement; sec.classList.toggle('closed'); prefs.closed = prefs.closed || {}; prefs.closed[sec.getAttribute('data-sec')] = sec.classList.contains('closed'); savePrefs(); return; }
+  if (h && !ev.target.closest('.grip')) { const sec = h.parentElement; sec.classList.toggle('closed'); prefs.closed = prefs.closed || {}; prefs.closed[sec.getAttribute('data-sec')] = sec.classList.contains('closed'); savePrefs(); return; }
   const a = ev.target.closest('[data-name]'); if (a) { ev.preventDefault(); select(a.getAttribute('data-name')); }
 });
 
@@ -780,6 +914,7 @@ function applyWidths() {
 }
 function setBelow(on) {
   document.body.classList.toggle('below', on);
+  document.documentElement.classList.toggle('below', on);
   (on ? belowEl : mainEl).appendChild(right);
   moveBtn.textContent = on ? 'Panel right' : 'Panel below';
   moveBtn.classList.toggle('active', on);

@@ -261,6 +261,17 @@ def test_html_renders_without_console_errors(report, tmp_path):
         page.locator("#search").fill("")
         page.locator("table.mods tr[data-name='mp2']").click()
         assert page.locator("#below #right h2").inner_text() == "mp2"
+        # the page scrolls to the last section and at most two cards share a row
+        page.locator("[data-secs='open']").click()
+        last = page.locator("#right .sec").last
+        last.scroll_into_view_if_needed()
+        assert last.bounding_box()["y"] + last.bounding_box()["height"] <= page.viewport_size["height"] + 1
+        assert page.evaluate("getComputedStyle(document.querySelector('#right .secs')).gridTemplateColumns.split(' ').length") == 2
+        assert page.locator("#right .cell .d").count() >= 20
+        # in panel-below mode each section carries its guide text
+        assert page.locator("#right .sec[data-sec='rank'] .explain").is_visible()
+        assert "Effective rank" in page.locator("#right .sec[data-sec='rank'] .explain").inner_text()
+        assert page.locator("#right .sec[data-sec='capacity'] .explain table").count() == 1
         page.locator("#moveDetail").click()
         assert page.locator("main #right h2").count() == 1
         # sidebars: drag the gutters
@@ -278,7 +289,8 @@ def test_html_renders_without_console_errors(report, tmp_path):
         assert page.locator("#guide").is_visible()
         box = page.locator("#guide .box").bounding_box()
         assert box["width"] > 1300 and box["height"] > 700
-        assert page.locator("#guide h2").count() >= 8
+        assert page.locator("#guide h2").count() >= 9
+        assert page.locator("#g-svd").count() == 1
         assert "saturated" in page.locator("#guide table").nth(2).inner_text() or "saturated" in page.locator("#guide").inner_text()
         page.keyboard.press("Escape")
         assert not page.locator("#guide").is_visible()
@@ -291,6 +303,24 @@ def test_html_renders_without_console_errors(report, tmp_path):
         assert page.locator("#guide").is_visible()
         assert page.evaluate("document.getElementById('g-sweep').getBoundingClientRect().top < 200")
         page.keyboard.press("Escape")
+        # chart hover shows live values; sections reorder by drag and the order sticks
+        sv = page.locator("#right .sec[data-sec='rank'] svg[data-chart]").first
+        sv.scroll_into_view_if_needed()
+        bb = sv.bounding_box(); page.mouse.move(bb["x"] + bb["width"] * 0.6, bb["y"] + bb["height"] * 0.5)
+        assert page.locator("#tip").is_visible() and "σ[" in page.locator("#tip").inner_text()
+        first = page.locator("#right .sec").first.get_attribute("data-sec")
+        page.evaluate("""() => { const secs = [...document.querySelectorAll('#right .sec')]; const a = secs[0], b = secs[1];
+          const dt = new DataTransfer();
+          a.dispatchEvent(new DragEvent('dragstart', {bubbles: true, dataTransfer: dt}));
+          const r = b.getBoundingClientRect();
+          b.dispatchEvent(new DragEvent('dragover', {bubbles: true, dataTransfer: dt, clientX: r.left + r.width - 2, clientY: r.top + r.height - 2}));
+          b.dispatchEvent(new DragEvent('drop', {bubbles: true, dataTransfer: dt, clientX: r.left + r.width - 2, clientY: r.top + r.height - 2}));
+          a.dispatchEvent(new DragEvent('dragend', {bubbles: true, dataTransfer: dt})); }""")
+        assert page.locator("#right .sec").first.get_attribute("data-sec") != first
+        page.locator("table.mods tr[data-name='mp3']").click()          # re-render keeps the order
+        assert page.locator("#right .sec").first.get_attribute("data-sec") != first
+        page.locator("[data-secs='reset']").click()
+        assert page.locator("#right .sec").first.get_attribute("data-sec") == first
         browser.close()
     assert not page_errors, page_errors
     assert not errors, errors
