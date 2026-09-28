@@ -20,6 +20,7 @@ THRESH = {
     "cka_dup": 0.98,
     "saturated": 0.85,
     "tight": 0.60,
+    "alpha_min_rank": 20,     # alpha is not used for a verdict on matrices with fewer eigenvalues
     "upstream_slack": 0.10,   # carry*(1-slack)-1 <= rank <= carry*(1+slack)+1  => tracks the input
 }
 
@@ -62,8 +63,11 @@ def compute_carry(mods: Dict[str, dict]) -> None:
         m["carry"] = int(carry) if carry is not None else None
 
 
-def _nearest_upstream(mods: Dict[str, dict], name: str, pred) -> Optional[str]:
-    """BFS backwards through producers for the nearest module satisfying pred."""
+def _nearest_upstream(mods: Dict[str, dict], name: str, pred, skip_relatives: bool = False) -> Optional[str]:
+    """BFS backwards through producers for the nearest module satisfying pred.
+    With ``skip_relatives`` a module's own descendants (and ancestors) are
+    walked through but never returned, so a container is compared with what
+    feeds it, not with its own child."""
     seen: Set[str] = {name}
     q = deque(mods[name]["producers"])
     while q:
@@ -71,7 +75,7 @@ def _nearest_upstream(mods: Dict[str, dict], name: str, pred) -> Optional[str]:
         if p in seen or p not in mods:
             continue
         seen.add(p)
-        if pred(mods[p]):
+        if pred(mods[p]) and not (skip_relatives and is_relative(name, p)):
             return p
         q.extend(mods[p]["producers"])
     return None
@@ -197,7 +201,7 @@ def _verdict_for(m: dict, mods: Dict[str, dict], T: Dict) -> Tuple[str, str, str
     # 3. oversmoothed (decay vs nearest upstream graph layer, trap 5) ----------
     de = m.get("dirichlet")
     if _isnum(de):
-        ref = _nearest_upstream(mods, name, lambda x: _isnum(x.get("dirichlet")))
+        ref = _nearest_upstream(mods, name, lambda x: _isnum(x.get("dirichlet")), skip_relatives=True)
         if ref is not None:
             dref = mods[ref]["dirichlet"]
             ratio = de / dref if dref > 0 else float("inf")
@@ -222,7 +226,7 @@ def _verdict_for(m: dict, mods: Dict[str, dict], T: Dict) -> Tuple[str, str, str
                                     and x["n_params_total"] > 0)
             if src:
                 where = f"widen {src} instead"
-            elif not m["producers"]:
+            elif not [p for p in m["producers"] if not is_ancestor(name, p)]:
                 where = "the raw input is the limit, so add input features instead"
             else:
                 where = ("add capacity where that information is created (earlier layers, more "
@@ -237,7 +241,8 @@ def _verdict_for(m: dict, mods: Dict[str, dict], T: Dict) -> Tuple[str, str, str
 
     # 5. undertrained ---------------------------------------------------------
     alpha = m.get("alpha")
-    if _isnum(alpha) and alpha > T["alpha_undertrained"]:
+    if (_isnum(alpha) and alpha > T["alpha_undertrained"]
+            and (m.get("max_weight_rank") or 0) >= T["alpha_min_rank"]):
         return ("undertrained",
                 f"Weight spectrum is still close to random (alpha {alpha:.1f} > 6): this layer needs "
                 f"more steps, data or learning rate, not more neurons.",

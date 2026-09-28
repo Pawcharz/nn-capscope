@@ -106,6 +106,21 @@ def test_no_undertrained_warning_on_converged_model(report):
     assert not any("UNDERTRAINED" in w or "undertrained" in w for w in report.warnings), report.warnings
 
 
+def test_conservative_used_rank(report):
+    for m in report.modules:
+        sw = m.get("sweep")
+        if sw:
+            assert sw["used_rank_safe"] >= sw["used_rank"], m["name"]
+            assert all(l <= sw["threshold"] for k, l in zip(sw["ks"], sw["losses"]) if k >= sw["used_rank_safe"]), m["name"]
+
+
+def test_dirichlet_reference_is_never_own_child(report):
+    for m in report.modules:
+        ref = m.get("dirichlet_ref")
+        if ref:
+            assert not is_relative(m["name"], ref), (m["name"], ref)
+
+
 def test_untrained_checkpoint_is_detected():
     torch.manual_seed(1)
     model = ToyGraphNet()
@@ -174,6 +189,8 @@ def test_emitter_containers_are_graph_nodes():
     assert rep["head"]["is_sink"] and not rep["convs.1"]["is_sink"]
     # a container's rank cap comes from the leaf that produces its output, not its narrowest weight
     assert rep["convs.0"]["max_weight_rank"] == 8            # both Linears take 8 inputs
+    assert rep["convs.0"]["alpha_reading"].startswith("not reliable")   # 8 eigenvalues: no alpha verdict
+    assert rep["convs.0"]["verdict"] != "undertrained" and rep["convs.0.lin_l"]["verdict"] != "undertrained"
     assert rep["convs.1"]["max_weight_rank"] == 32
     assert rep["trunk"]["rank_cap"] == "square" and rep["trunk"]["max_weight_rank"] == 32
     js = rep.to_json()
