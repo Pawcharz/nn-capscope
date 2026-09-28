@@ -49,6 +49,16 @@ The factory may return a bare model (data-free mode: weight spectra only), a
 `(model, loader)` tuple, or a dict with any of `model, loader, forward_fn,
 loss_fn, edge_index_fn, n_batches`. See `tests/toy_model.py:build_model`.
 
+A saved report carries all its data, so it can be reopened without the model:
+
+```bash
+capscope out.html                        # serve the GUI again, no recompute
+capscope out.html --html new.html --no-gui   # re-render with the current template
+```
+
+`--json out.json` saves the raw data; `Report.load(path)` does the same from
+Python for either format.
+
 ## What it measures
 
 Per module (leaves *and* containers, root excluded), from activations

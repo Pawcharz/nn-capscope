@@ -180,6 +180,23 @@ def test_emitter_containers_are_graph_nodes():
     assert '"emits": true' in js
 
 
+def test_reload_from_saved_report(report, tmp_path):
+    from capscope import Report
+    from capscope.cli import main
+    html = report.to_html(tmp_path / "r.html")
+    js = report.to_json_file(tmp_path / "r.json")
+    for path in (html, js):
+        again = Report.load(path)
+        assert again.names() == report.names()
+        assert again.edges == report.edges
+        assert again["bottleneck"]["verdict"] == "saturated"
+        assert again.to_json() == report.to_json()
+    # the CLI reopens a report without a factory and re-renders it with the current template
+    out = tmp_path / "again.html"
+    assert main([html, "--no-gui", "--quiet", "--html", str(out)]) == 0
+    assert "bottleneck" in out.read_text(encoding="utf-8")
+
+
 def test_data_free_mode():
     model = ToyGraphNet()
     rep = inspect(model)             # weight spectra only, no loader

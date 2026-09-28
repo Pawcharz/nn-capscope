@@ -2,6 +2,7 @@
 
     capscope path/to/file.py:build_model [--html out.html] [--port 8765] [--no-open]
                                         [--summary] [--n-batches 8]
+    capscope saved_report.html            # reopen a saved report: no model, no recompute
 
 The factory may return:
   * a model                      -> data-free diagnostics (weight spectra only)
@@ -16,7 +17,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from .report import inspect
+from .report import Report, inspect
 
 
 def load_factory(spec: str):
@@ -50,8 +51,9 @@ def _normalise(obj) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="capscope", description="Capacity diagnostics for a frozen PyTorch model.")
-    ap.add_argument("factory", help="path/to/file.py:build_model")
+    ap.add_argument("factory", help="path/to/file.py:build_model, or a saved report.html / report.json to reopen")
     ap.add_argument("--html", help="save a self-contained HTML report to this path")
+    ap.add_argument("--json", help="save the raw report data to this path (reopen with `capscope file.json`)")
     ap.add_argument("--port", type=int, default=0, help="port for the GUI server (default: random free port)")
     ap.add_argument("--no-open", action="store_true", help="do not open a browser")
     ap.add_argument("--no-gui", action="store_true", help="do not launch the GUI (print the summary instead)")
@@ -60,17 +62,24 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
-    factory = load_factory(args.factory)
-    cfg = _normalise(factory())
-    if "model" not in cfg:
-        raise SystemExit("factory must return a model, (model, loader) or a dict with 'model'")
-    kwargs = {k: cfg[k] for k in ("loader", "forward_fn", "loss_fn", "edge_index_fn", "n_batches") if k in cfg}
-    if args.n_batches is not None:
-        kwargs["n_batches"] = args.n_batches
-    report = inspect(cfg["model"], verbose=not args.quiet, **kwargs)
+    if args.factory.lower().endswith((".html", ".json")):
+        report = Report.load(args.factory)
+        if not args.quiet:
+            print(f"[capscope] reloaded {args.factory}: {len(report.modules)} modules, {len(report.edges)} edges")
+    else:
+        factory = load_factory(args.factory)
+        cfg = _normalise(factory())
+        if "model" not in cfg:
+            raise SystemExit("factory must return a model, (model, loader) or a dict with 'model'")
+        kwargs = {k: cfg[k] for k in ("loader", "forward_fn", "loss_fn", "edge_index_fn", "n_batches") if k in cfg}
+        if args.n_batches is not None:
+            kwargs["n_batches"] = args.n_batches
+        report = inspect(cfg["model"], verbose=not args.quiet, **kwargs)
 
     if args.html:
         print(f"[capscope] wrote {report.to_html(args.html)}")
+    if args.json:
+        print(f"[capscope] wrote {report.to_json_file(args.json)}")
     if args.summary or args.no_gui:
         report.summary()
     if not args.no_gui:

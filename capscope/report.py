@@ -323,6 +323,38 @@ class Report:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), allow_nan=False)
 
+    # ---- reload without recomputing ---------------------------------------
+    @classmethod
+    def from_dict(cls, d: dict) -> "Report":
+        mods = {m["name"]: m for m in d["modules"]}
+        return cls(mods, [tuple(e) for e in d.get("edges", [])], d.get("hierarchy", []),
+                   d.get("cka", {"names": [], "matrix": []}), d.get("warnings", []), d.get("meta", {}))
+
+    @classmethod
+    def load(cls, path: str) -> "Report":
+        """Rebuild a Report from a saved ``.html`` report (the data is embedded
+        in it) or a ``.json`` dump, so the GUI can be reopened, re-rendered
+        with the current template, or the table reprinted without running the
+        model again."""
+        text = Path(path).read_text(encoding="utf-8")
+        if Path(path).suffix.lower() == ".json":
+            return cls.from_dict(json.loads(text))
+        head = "const DATA = "
+        i = text.find(head)
+        if i < 0:
+            raise ValueError(f"{path} is not a capscope report (no embedded data)")
+        i += len(head)
+        j = text.find(";\n(function () {", i)
+        if j < 0:
+            raise ValueError(f"{path}: embedded data block not terminated")
+        return cls.from_dict(json.loads(text[i:j].replace("<\\/", "</")))
+
+    def to_json_file(self, path: str) -> str:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(self.to_json(), encoding="utf-8")
+        return str(p)
+
     def html(self) -> str:
         tpl = _TEMPLATE.read_text(encoding="utf-8")
         payload = self.to_json().replace("</", "<\\/")
