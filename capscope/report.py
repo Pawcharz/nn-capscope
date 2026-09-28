@@ -23,6 +23,7 @@ from .truncation import _eval_loss, truncation_sweep
 from .verdict import THRESH, assign_verdicts
 
 _TEMPLATE = Path(__file__).parent / "gui" / "template.html"
+_GUIDE = Path(__file__).parent / "gui" / "guide.html"
 
 
 # ----------------------------------------------------------------------------
@@ -325,7 +326,9 @@ class Report:
     def html(self) -> str:
         tpl = _TEMPLATE.read_text(encoding="utf-8")
         payload = self.to_json().replace("</", "<\\/")
-        return tpl.replace("/*__CAPSCOPE_DATA__*/null", payload)
+        guide = _GUIDE.read_text(encoding="utf-8") if _GUIDE.exists() else ""
+        return (tpl.replace("/*__CAPSCOPE_DATA__*/null", payload)
+                   .replace("<!--__CAPSCOPE_GUIDE__-->", guide))
 
     def to_html(self, path: str) -> str:
         p = Path(path)

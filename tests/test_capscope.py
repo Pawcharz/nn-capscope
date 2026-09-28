@@ -255,6 +255,16 @@ def test_html_renders_without_console_errors(report, tmp_path):
         gut = page.locator("#gutR").bounding_box()
         page.mouse.move(gut["x"] + 3, gut["y"] + 200); page.mouse.down(); page.mouse.move(gut["x"] + 100, gut["y"] + 200, steps=4); page.mouse.up()
         assert page.locator("#right").bounding_box()["width"] < right_before - 60
+        # guide modal: opens page-size, has the verdict table, closes on Escape
+        assert not page.locator("#guide").is_visible()
+        page.locator("#guideBtn").click()
+        assert page.locator("#guide").is_visible()
+        box = page.locator("#guide .box").bounding_box()
+        assert box["width"] > 1300 and box["height"] > 700
+        assert page.locator("#guide h2").count() >= 8
+        assert "saturated" in page.locator("#guide table").nth(2).inner_text() or "saturated" in page.locator("#guide").inner_text()
+        page.keyboard.press("Escape")
+        assert not page.locator("#guide").is_visible()
         browser.close()
     assert not page_errors, page_errors
     assert not errors, errors

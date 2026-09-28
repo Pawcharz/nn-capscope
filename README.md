@@ -141,6 +141,9 @@ saved HTML works offline.
   remembered in the browser.
 * **Similarity view**: full CKA heatmap (dark squares = redundant blocks),
   hover for values, click to select.
+* **Guide**: a page-size modal (header button, Esc closes) explaining how to
+  read every metric, the verdict order and the priority score, as built.
+  Source: `capscope/gui/guide.html`, injected into the report at render time.
 
 ## Tests
 
