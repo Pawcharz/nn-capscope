@@ -265,6 +265,8 @@ def test_llm_export(report, tmp_path):
     md = report.to_llm("md")
     assert md.startswith("# capscope report:")
     assert "## Modules by growth priority" in md and "## Legend" in md
+    assert "## Headline" in md and d["meta"]["headline"] and "headline" in d["legend"]["meta"]
+    assert b["sweep"]["used_rank_safe"] >= b["sweep"]["used_rank"]
     assert md.count("\n### `") == len(report.modules)
     assert "`mp1.lin_self` →" in md or "→ `bottleneck`" in md
     assert "**saturated**" in md

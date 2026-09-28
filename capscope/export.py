@@ -68,6 +68,7 @@ FIELDS: Dict[str, str] = {
     "sweep.base_loss": "Loss of the untouched model on the sweep batches.",
     "sweep.loss_at_1": "Loss when the weight is truncated to rank 1.",
     "sweep.curve": "loss at each swept rank k (log grid); shows how fast the module degrades as rank is removed.",
+    "sweep.used_rank_safe": "Conservative used rank: one above the largest evaluated rank still over tolerance, so a non-monotone dip does not count.",
     "redundancy.dead": "Units with (near) zero variance over the sampled rows.",
     "redundancy.dup": "Units whose activations correlate above dup_thresh with another unit.",
     "redundancy.redundant_frac": "(dead + dup) / width. > 0.35 => 'redundant'.",
@@ -99,6 +100,9 @@ META_FIELDS: Dict[str, str] = {
     "has_loss": "Whether a loss was given: enables the truncation sweep and pressure. Without it used_rank falls back to rank99.",
     "has_graph": "Whether an edge index was given: enables dirichlet / mad.",
     "base_loss": "Loss of the untouched model on the sweep batches.",
+    "base_loss_spread": "Spread of the base loss across the sweep batches: how much of a loss change is data dependence rather than signal.",
+    "n_sweep_batches": "Batches the truncation sweep was evaluated on.",
+    "headline": "The report's own one-paragraph reading of the whole model, sentence by sentence.",
     "thresholds": "Verdict thresholds in force for this report (verdict.THRESH plus overrides).",
     "capscope_version": "Version of capscope that produced the report.",
     "generated_at": "UTC timestamp of the export.",
@@ -134,7 +138,7 @@ def _module_record(m: dict) -> dict:
     sw = m.get("sweep")
     if sw:
         rec["sweep"] = {
-            "used_rank": sw.get("used_rank"), "max_rank": sw.get("max_rank"),
+            "used_rank": sw.get("used_rank"), "used_rank_safe": sw.get("used_rank_safe"), "max_rank": sw.get("max_rank"),
             "base_loss": _num(sw.get("base_loss"), 6), "loss_at_1": _num(sw.get("loss_at_1"), 6),
             "pressure": _num(sw.get("pressure")),
             "curve": {str(k): _num(l, 6) for k, l in zip(sw.get("ks", []), sw.get("losses", []))},
@@ -177,8 +181,9 @@ def to_llm_dict(report, source: Optional[str] = None, top_cka: int = 15) -> dict
     meta["generated_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     if source is not None:
         meta["source"] = str(source)
-    if isinstance(meta.get("base_loss"), float):
-        meta["base_loss"] = _num(meta["base_loss"], 6)
+    for k in ("base_loss", "base_loss_spread"):
+        if isinstance(meta.get(k), float):
+            meta[k] = _num(meta[k], 6)
     ranked = report.ranked()
     return {
         "format": FORMAT,
@@ -238,6 +243,11 @@ def to_llm_markdown(report, source: Optional[str] = None) -> str:
              + (f" · source `{meta['source']}`" if meta.get("source") else ""))
     L.append("")
     L.append("Thresholds: " + ", ".join(f"{k} = {v}" for k, v in (meta.get("thresholds") or {}).items()) + ".")
+    if meta.get("headline"):
+        L.append("")
+        L.append("## Headline")
+        L.append("")
+        L += [f"- {h}" for h in meta["headline"]]
     if d["warnings"]:
         L.append("")
         L.append("## Warnings")
