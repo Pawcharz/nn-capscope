@@ -92,6 +92,22 @@ table.mods td.num { text-align: right; font-family: var(--mono); color: var(--mu
 .grid .v { font-family: var(--mono); font-size: 12px; }
 .grid .cell { padding: 4px 6px; background: #0f1522; border-radius: 4px; }
 #right h3 { font-size: 12px; color: var(--muted); margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .6px; }
+.sec { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; background: #0d1320; }
+.sec > .sech { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; user-select: none; }
+.sec > .sech:hover { background: #131b2b; }
+.sec > .sech .tri { color: var(--dim); font-size: 10px; width: 10px; transition: transform .12s; }
+.sec.closed > .sech .tri { transform: rotate(-90deg); }
+.sec > .sech h3 { margin: 0; flex: 1; }
+.sec > .sech .sum { color: var(--dim); font-size: 11px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+.sec > .sech .help { color: var(--dim); border: 1px solid var(--line2); border-radius: 50%; width: 16px; height: 16px; font-size: 10px; line-height: 14px; text-align: center; flex: none; }
+.sec > .sech .help:hover { color: var(--accent); border-color: var(--accent); }
+.sec > .secb { padding: 6px 10px 8px; border-top: 1px solid var(--line); }
+.sec.closed > .secb { display: none; }
+.sec .grid { margin-bottom: 6px; }
+.sec .chart { margin-bottom: 4px; }
+body.below #right .secs { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 10px; align-items: start; }
+body.below #right .sec { margin: 0; }
+body.below #right .sec.wide { grid-column: 1 / -1; }
 .chart { background: #0f1522; border-radius: 6px; padding: 4px; margin-bottom: 6px; }
 .chart svg { display: block; width: 100%; height: auto; }
 .charts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -564,57 +580,121 @@ function renderDetail() {
   }
   const col = colorOf(m); const r = m.rank || {}; const red = m.redundancy || {};
   const cap = m.rank_cap ? (m.rank_cap === 'input' ? `input-capped (≤${m.max_weight_rank})` : m.rank_cap === 'output' ? `output-capped (≤${m.max_weight_rank})` : `square (≤${m.max_weight_rank})`) : '–';
+  const kind = m.is_leaf ? 'leaf' : (m.emits ? 'container that computes its own output' : 'container');
+  const has = v => v !== null && v !== undefined;
+  const closed = prefs.closed || {};
+  const section = (id, title, guideId, summary, body, wide) =>
+    `<div class="sec ${closed[id] ? 'closed' : ''} ${wide ? 'wide' : ''}" data-sec="${id}">
+      <div class="sech"><span class="tri">▼</span><h3>${esc(title)}</h3><span class="sum">${summary || ''}</span><span class="help" data-guide="${guideId}" title="Open the guide at this section">?</span></div>
+      <div class="secb">${body}</div></div>`;
   let html = `<h2>${esc(m.name)}</h2>
-    <div class="sub">${esc(m.type)} · ${m.is_leaf ? 'leaf' : (m.emits ? 'container that computes its own output' : 'container')} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
-    <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div>
-    <div class="grid">
-      ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–')}
+    <div class="sub">${esc(m.type)} · ${kind} · exec #${m.exec_order}${m.n_calls > 1 ? ` · called ${m.n_calls}×/batch` : ''} · <span class="pill" style="background:${col}">${m.verdict}</span> · priority <b>${m.priority.toFixed(2)}</b></div>
+    <div class="sentence" style="border-color:${col}">${esc(m.sentence)}</div><div class="secs">`;
+
+  // 1. capacity: the numbers the verdict is made from
+  html += section('capacity', 'Capacity verdict inputs', 'g-verdicts',
+    has(m.used_frac) ? `${m.used_rank}/${m.width} · ${pct(m.used_frac)}` : '',
+    `<div class="grid">
+      ${cell('used rank', has(m.used_rank) ? `${m.used_rank} of ${m.width} (${pct(m.used_frac)})` : '–', m.used_rank_source)}
+      ${cell('marginal pressure', has(m.pressure) ? '+' + pct(m.pressure) + ' loss' : '–', 'relative loss increase when the module loses its single last used dimension (from the truncation sweep)')}
+      ${cell('weight rank cap', cap, 'input-capped: rank limited by the input width → widen upstream. output-capped / square: limited by this module\'s own width.')}
+      ${cell('upstream carry', fmt(m.carry), 'narrowest point along the paths feeding this module; "upstream" fires when used rank ≈ carry < width')}
       ${cell('width (D) / input dim', `${fmt(m.width)} / ${fmt(m.in_dim)}`)}
+      ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–')}
       ${cell('parameters (own / total)', `${fmtParams(m.n_params_own)} / ${fmtParams(m.n_params_total)}`)}
-      ${cell('used rank', m.used_rank === null || m.used_rank === undefined ? '–' : `${m.used_rank} of ${m.width} (${pct(m.used_frac)})`, m.used_rank_source)}
-      ${cell('marginal pressure', m.pressure === null || m.pressure === undefined ? '–' : '+' + pct(m.pressure) + ' loss', 'relative loss increase when the module loses its single last used dimension (from the truncation sweep)')}
-      ${cell('weight rank cap', cap, 'input-capped: rank limited by the input width → widen upstream. output-capped: limited by this module\'s own width.')}
-      ${cell('upstream carry', fmt(m.carry), 'narrowest point along the paths feeding this module')}
-      ${cell('effective rank', fmt(r.effective_rank, 1), 'exp(H(σ/Σσ)) of the centred activations')}
+      ${cell('rule that fired', esc(m.reason || '–'))}
+    </div>`);
+
+  // 2. activation rank
+  html += section('rank', 'Rank and saturation (activations)', 'g-rank',
+    has(r.effective_rank) ? `eff ${fmt(r.effective_rank, 1)} · 99% @ ${fmt(r.rank99)}` : 'no activations',
+    `<div class="grid">
+      ${cell('effective rank', fmt(r.effective_rank, 1), 'exp(H(σ/Σσ)) of the centred activations; inflated by nonlinearities')}
       ${cell('stable rank', fmt(r.stable_rank, 1), 'Σσ²/σ_max²')}
       ${cell('participation ratio', fmt(r.participation_ratio, 1))}
-      ${cell('numerical rank', fmt(r.numerical_rank))}
-      ${cell('rank @ 90% / 99%', `${fmt(r.rank90)} / ${fmt(r.rank99)}`)}
-      ${cell('alpha (Hill)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || '')}`)}
-      ${cell('Dirichlet energy', m.dirichlet === null || m.dirichlet === undefined ? '–' : `${fmt(m.dirichlet, 3)}${m.dirichlet_ref ? ` (${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)})` : ''}`, 'centred, normalised; random ≈ 2, smoothed → 0. Verdict uses the decay vs the nearest upstream graph layer.')}
-      ${cell('MAD', fmt(m.mad, 3), 'mean average cosine distance to neighbours (raw features; unreliable when features share a sign)')}
-      ${cell('dead / duplicate units', `${fmt(red.dead)} / ${fmt(red.dup)} (${pct(red.redundant_frac)})`)}
-      ${cell('best unrelated CKA', m.cka_partner ? `${fmt(m.cka_partner_value, 3)} · ${esc(m.cka_partner)}` : '–')}
-      ${cell('activation range', `${fmt(m.hist && m.hist.edges.length ? m.hist.edges[0] : null, 2)} … ${fmt(m.hist && m.hist.edges.length ? m.hist.edges[m.hist.edges.length - 1] : null, 2)}`)}
-      ${cell('feeds / fed by', `${m.consumers.length} / ${m.producers.length}`)}
-    </div>`;
-  html += `<h3>Spectra</h3><div class="charts2">${chartSpectrum('Activation singular values', r.singular_values, '#60a5fa', [{ k: r.rank90, color: '#f59e0b', label: '90%' }, { k: r.rank99, color: '#ef4444', label: '99%' }])}${chartCumVar(r)}</div>`;
-  if (m.weights && m.weights.length) {
-    html += `<div class="charts2">${m.weights.slice(0, 2).map(wt => chartSpectrum(`Weight σ · ${wt.name} [${wt.shape.join('×')}]`, wt.singular_values, '#a78bfa', m.sweep ? [{ k: m.sweep.used_rank, color: '#f59e0b', label: 'used' }] : [])).join('')}</div>`;
-    if (m.weights.length > 2) html += `<div class="hint">${m.weights.length - 2} more weight matrices not shown.</div>`;
+      ${cell('numerical rank', fmt(r.numerical_rank), 'σ above float32 precision of σ_max')}
+      ${cell('rank @ 90% / 99% energy', `${fmt(r.rank90)} / ${fmt(r.rank99)}`)}
+      ${cell('rows sampled', fmt(r.n_rows))}
+    </div>
+    <div class="charts2">${chartSpectrum('Activation singular values', r.singular_values, '#60a5fa', [{ k: r.rank90, color: '#f59e0b', label: '90%' }, { k: r.rank99, color: '#ef4444', label: '99%' }])}${chartCumVar(r)}</div>`);
+
+  // 3. truncation sweep
+  const sw = m.sweep;
+  html += section('sweep', 'Truncation sweep (loss)', 'g-sweep',
+    sw ? `used ${sw.used_rank} / ${sw.max_rank}` : (DATA.meta.has_loss ? 'no matrix weights' : 'no loss_fn'),
+    `${sw ? `<div class="grid">
+      ${cell('used rank / max rank', `${sw.used_rank} / ${sw.max_rank}`, 'smallest k within rel_tol of the base loss; max rank = largest min(in, out) among the swept weights')}
+      ${cell('base loss / tolerance', `${sw.base_loss.toPrecision(4)} / +${Math.round(sw.rel_tol * 100)}%`)}
+      ${cell('loss at rank 1', has(sw.loss_at_1) ? sw.loss_at_1.toPrecision(4) : '–', 'what destroying the module costs; near base on every module = undertrained checkpoint')}
+      ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–')}
+    </div>` : ''}${chartSweep(sw)}`, true);
+
+  // 4. weight spectra / alpha
+  const wts = m.weights || [];
+  html += section('alpha', 'Weight spectrum (alpha)', 'g-alpha',
+    has(m.alpha) && Number.isFinite(m.alpha) ? `α ${m.alpha.toFixed(2)} · ${esc(m.alpha_reading || '')}` : 'no matrix weights',
+    `<div class="grid">
+      ${cell('alpha (Hill, median over weights)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || 'n/a')}`, '> 6 undertrained (≈ random init), 2–6 well conditioned, < 2 over-trained')}
+      ${cell('matrix weights', wts.length ? wts.map(w => `${esc(w.name)} [${w.shape.join('×')}]`).join(', ') : '–')}
+      ${cell('binding weight', m.rank_cap ? `${esc(m.rank_cap)}-capped at ${m.max_weight_rank}` : '–', 'the weight producing this module\'s output')}
+    </div>
+    ${chartAlpha(m.alpha, wts)}
+    ${wts.length ? `<div class="charts2">${wts.slice(0, 2).map(wt => chartSpectrum(`Weight σ · ${wt.name} [${wt.shape.join('×')}]`, wt.singular_values, '#a78bfa', sw ? [{ k: sw.used_rank, color: '#f59e0b', label: 'used' }] : [])).join('')}</div>${wts.length > 2 ? `<div class="hint">${wts.length - 2} more weight matrices not shown.</div>` : ''}` : ''}`);
+
+  // 5. graph / oversmoothing (only when graph metrics exist for this run)
+  if (DATA.meta.has_graph) {
+    html += section('graph', 'Graph: oversmoothing', 'g-graph',
+      has(m.dirichlet) ? `dirichlet ${fmt(m.dirichlet, 3)}${m.dirichlet_ref ? ` · ${pct(m.dirichlet_ratio)} of upstream` : ''}` : 'not node-aligned',
+      `<div class="grid">
+        ${cell('Dirichlet energy (centred)', has(m.dirichlet) ? fmt(m.dirichlet, 3) : '–', 'random ≈ 2, smoothed → 0')}
+        ${cell('vs nearest upstream graph layer', m.dirichlet_ref ? `${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)} (${fmt(M[m.dirichlet_ref] ? M[m.dirichlet_ref].dirichlet : null, 3)})` : '–', 'oversmoothed fires when energy < 0.05 and < 30% of this')}
+        ${cell('MAD (raw cosine)', fmt(m.mad, 3), 'collapses whenever features share a sign; corroboration only')}
+      </div>`);
   }
-  html += `<h3>Truncation sweep</h3>${chartSweep(m.sweep)}`;
-  html += `<h3>Weight spectrum tail</h3>${chartAlpha(m.alpha, m.weights)}`;
-  html += `<h3>Activations</h3>${chartHist(m.hist)}`;
-  // neighbours
-  html += `<h3>Nearest CKA neighbours</h3>`;
+
+  // 6. redundancy & unit health
   const i = CKA_IDX[m.name];
-  if (i === undefined) html += '<div class="empty">No CKA data.</div>';
+  let nbHtml = '';
+  if (i === undefined) nbHtml = '<div class="empty">No CKA data.</div>';
   else {
     const row = DATA.cka.matrix[i];
-    const nb = DATA.cka.names.map((n, j) => ({ n, v: row[j] })).filter(o => o.n !== m.name && o.v !== null && o.v !== undefined).sort((a, b) => b.v - a.v).slice(0, 8);
-    if (!nb.length) html += '<div class="empty">No aligned modules.</div>';
+    const nb = DATA.cka.names.map((n, j) => ({ n, v: row[j] })).filter(o => o.n !== m.name && has(o.v)).sort((a, b) => b.v - a.v).slice(0, 8);
+    if (!nb.length) nbHtml = '<div class="empty">No aligned modules.</div>';
     nb.forEach(o => {
       const rel = m.name.startsWith(o.n + '.') ? 'ancestor' : o.n.startsWith(m.name + '.') ? 'child' : (m.producers.indexOf(o.n) >= 0 ? 'feeds it' : m.consumers.indexOf(o.n) >= 0 ? 'fed by it' : '');
-      html += `<div class="nb" data-name="${esc(o.n)}"><span class="pill" style="background:${colorOf(M[o.n])};width:8px;height:8px;padding:0;border-radius:50%"></span><span class="n">${esc(o.n)}</span><span class="r">${rel}</span><span class="bar"><i style="width:${Math.round(100 * o.v)}%;background:${o.v > 0.98 ? '#ec4899' : '#60a5fa'}"></i></span><span class="val">${o.v.toFixed(3)}</span></div>`;
+      nbHtml += `<div class="nb" data-name="${esc(o.n)}"><span class="pill" style="background:${colorOf(M[o.n])};width:8px;height:8px;padding:0;border-radius:50%"></span><span class="n">${esc(o.n)}</span><span class="r">${rel}</span><span class="bar"><i style="width:${Math.round(100 * o.v)}%;background:${o.v > 0.98 ? '#ec4899' : '#60a5fa'}"></i></span><span class="val">${o.v.toFixed(3)}</span></div>`;
     });
   }
-  // structure
-  html += `<h3>Dataflow</h3><div class="grid">${cell('fed by', m.producers.length ? m.producers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(input)')}${cell('feeds', m.consumers.length ? m.consumers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(output)')}</div>`;
+  html += section('redundancy', 'Redundancy and unit health', 'g-redundancy',
+    has(red.redundant_frac) ? `${pct(red.redundant_frac)} dead/dup${m.cka_partner ? ` · CKA ${fmt(m.cka_partner_value, 2)}` : ''}` : '',
+    `<div class="grid">
+      ${cell('dead units', `${fmt(red.dead)} (${pct(red.dead_frac)})`, 'variance below 1e-6 of the mean unit variance')}
+      ${cell('duplicate units', `${fmt(red.dup)} (${pct(red.dup_frac)})`, '|corr| > 0.95 with an earlier unit')}
+      ${cell('dead + duplicate', pct(red.redundant_frac), 'redundant fires above 35%')}
+      ${cell('best unrelated CKA', m.cka_partner ? `${fmt(m.cka_partner_value, 3)} · ${esc(m.cka_partner)}` : '–', 'relatives and downstream modules excluded; redundant fires above 0.98')}
+    </div>
+    ${chartHist(m.hist)}
+    <h3>Nearest CKA neighbours</h3>${nbHtml}`);
+
+  // 7. dataflow
+  html += section('dataflow', 'Dataflow', 'g-dataflow',
+    `${m.producers.length} in · ${m.consumers.length} out${m.is_sink ? ' · sink' : ''}`,
+    `<div class="grid">
+      ${cell('fed by', m.producers.length ? m.producers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(input)')}
+      ${cell('feeds', m.consumers.length ? m.consumers.map(p => `<a href="#" data-name="${esc(p)}">${esc(p)}</a>`).join(', ') : '(output)')}
+      ${cell('node kind', kind)}
+      ${cell('execution order', `#${m.exec_order}${m.n_calls > 1 ? ` · ${m.n_calls} calls per batch` : ''}`)}
+      ${cell('activation range', `${fmt(m.hist && m.hist.edges.length ? m.hist.edges[0] : null, 2)} … ${fmt(m.hist && m.hist.edges.length ? m.hist.edges[m.hist.edges.length - 1] : null, 2)}`)}
+    </div>`);
+  html += '</div>';
   right.innerHTML = html;
   right.scrollTop = 0;
 }
 right.addEventListener('click', ev => {
+  const g = ev.target.closest('[data-guide]');
+  if (g) { ev.stopPropagation(); showGuide(true, g.getAttribute('data-guide')); return; }
+  const h = ev.target.closest('.sech');
+  if (h) { const sec = h.parentElement; sec.classList.toggle('closed'); prefs.closed = prefs.closed || {}; prefs.closed[sec.getAttribute('data-sec')] = sec.classList.contains('closed'); savePrefs(); return; }
   const a = ev.target.closest('[data-name]'); if (a) { ev.preventDefault(); select(a.getAttribute('data-name')); }
 });
 
@@ -736,7 +816,13 @@ if (top) select(top.name);
 fitView();
 // guide modal
 const guide = document.getElementById('guide');
-function showGuide(on) { guide.classList.toggle('show', on); if (on) guide.querySelector('.body').focus(); }
+function showGuide(on, anchor) {
+  guide.classList.toggle('show', on);
+  if (!on) return;
+  const body = guide.querySelector('.body'); body.focus();
+  const el = anchor ? document.getElementById(anchor) : null;
+  if (el) el.scrollIntoView({ block: 'start' }); else body.scrollTop = 0;
+}
 document.getElementById('guideBtn').addEventListener('click', () => showGuide(true));
 document.getElementById('guideClose').addEventListener('click', () => showGuide(false));
 guide.addEventListener('click', ev => { if (ev.target === guide) showGuide(false); });

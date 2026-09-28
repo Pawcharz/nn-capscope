@@ -265,6 +265,15 @@ def test_html_renders_without_console_errors(report, tmp_path):
         assert "saturated" in page.locator("#guide table").nth(2).inner_text() or "saturated" in page.locator("#guide").inner_text()
         page.keyboard.press("Escape")
         assert not page.locator("#guide").is_visible()
+        # detail sections: present, collapsible, and their "?" opens the guide at the anchor
+        assert page.locator("#right .sec").count() >= 6
+        page.locator("#right .sec[data-sec='rank'] .sech h3").click()
+        assert "closed" in page.locator("#right .sec[data-sec='rank']").get_attribute("class")
+        page.locator("#right .sec[data-sec='rank'] .sech h3").click()
+        page.locator("#right .sec[data-sec='sweep'] .help").click()
+        assert page.locator("#guide").is_visible()
+        assert page.evaluate("document.getElementById('g-sweep').getBoundingClientRect().top < 200")
+        page.keyboard.press("Escape")
         browser.close()
     assert not page_errors, page_errors
     assert not errors, errors

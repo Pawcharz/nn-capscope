@@ -132,10 +132,12 @@ saved HTML works offline.
   toggle.
 * **Module list**: sortable by growth priority, execution order, dimensions
   used, parameter count; capacity bar per row; text filter.
-* **Detail panel**: verdict sentence, metric grid, activation and weight
-  singular-value spectra, variance-explained curve, loss-under-truncation
-  sweep, alpha gauge with the < 2 / 2–6 / > 6 zones, activation histogram,
-  clickable nearest CKA neighbours, producers / consumers. **Panel below**
+* **Detail panel**: verdict sentence, then collapsible sections mirroring
+  the guide (capacity verdict inputs, activation rank with spectra and
+  variance-explained curve, truncation sweep, weight spectrum with the alpha
+  gauge, graph oversmoothing, redundancy with the histogram and nearest CKA
+  neighbours, dataflow). Each section's "?" opens the guide at that
+  section; open/closed state is remembered. **Panel below**
   moves it under the graph as a full-width section (the page then scrolls);
   both sidebars are resizable by dragging their gutters. Layout choices are
   remembered in the browser.

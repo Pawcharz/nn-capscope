@@ -4,7 +4,7 @@
   <p>Everything here is measured on the frozen checkpoint you handed in: forward passes over the batches you supplied, plus SVD on the existing weights. Nothing is trained.</p>
 </div>
 
-<h2>Rank and saturation metrics</h2>
+<h2 id="g-rank">Rank and saturation metrics</h2>
 <p>All of these come from the singular values of the module's activations, collected as an <code>[N, D]</code> matrix over the captured batches (rows subsampled to about 4096 in total) and mean-centred, so they are a PCA spectrum. They differ in how much weight they give the tail, which is why they disagree and why the disagreement is informative.</p>
 <table>
   <thead><tr><th>Metric</th><th>What it measures</th><th>Range</th><th>Where it misleads</th></tr></thead>
@@ -19,7 +19,7 @@
 <p>When they disagree, trust rank at 99 % energy over effective rank, and trust the truncation sweep over both. A large gap between numerical rank and rank at 90 % energy means a long low-energy tail: many directions carrying a little signal each, which is what a module looks like just before it runs out of room.</p>
 <p>The <b>activation singular-value chart</b> is worth reading directly. A sharp cliff means the module lives in far fewer dimensions than it has. A smooth decay reaching the noise floor only near D means there is no spare subspace to reclaim.</p>
 
-<h2>The truncation sweep</h2>
+<h2 id="g-sweep">The truncation sweep</h2>
 <p>This is the strongest signal the tool produces, because it is the only one that asks the loss rather than the activations. It runs only when you pass <code>loss_fn</code>. For each module, every matrix weight inside it (all of them jointly, for a container) is replaced by its rank-<i>k</i> approximation, <i>k</i> is swept on a log grid and then bisected, the loss is measured on the first few batches, and the weights are restored.</p>
 <ul>
   <li><b>used rank</b> is the smallest <i>k</i> that keeps the loss within <code>rel_tol</code> (1 %) of the base loss. If there is no sweep, the detail panel falls back to rank at 99 % energy and says so in the <i>used rank</i> cell's tooltip.</li>
@@ -34,7 +34,7 @@
 </ul>
 <p>Two cautions. The sweep is the expensive part of a run (one forward pass over the sweep batches per rank step per module), so on a large model start without <code>loss_fn</code>, read the activation ranks, then sweep. And on an undertrained checkpoint it reports used rank 1 almost everywhere, because destroying weights costs nothing when the model has not learned anything. The report detects that pattern (half or more of the swept leaves at rank ≤ 1) and puts a warning in the header instead of reporting confident verdicts.</p>
 
-<h2>Weight spectrum alpha</h2>
+<h2 id="g-alpha">Weight spectrum alpha</h2>
 <p>Alpha comes from the weights alone and needs no data, so it is the one thing the data-free mode reports. Take the eigenvalues λ of WᵀW in descending order and fit a power law to the tail with the Hill estimator over the top tenth (<i>k</i> ≈ n/10, at least 1):</p>
 <pre>alpha = 1 + k / Σ<sub>i≤k</sub> log(λ<sub>i</sub> / λ<sub>k+1</sub>)</pre>
 <p>The interpretation follows Heavy-Tailed Self-Regularisation (Martin and Mahoney), where alpha tracks how far a layer's spectrum has moved from its random initialisation:</p>
@@ -49,13 +49,13 @@
 <p>Alpha earns its place because it separates two states that look identical in the rank metrics: a layer that has not learned anything and a layer that has learned everything it can both show a saturated-looking spectrum. Alpha tells you which one you are looking at.</p>
 <p>It is noisy on small matrices. Convolutions are viewed as <code>[out, in·k·k]</code>. A module's alpha is the median over its matrix weights; the gauge shows each weight as a dot. Treat values from matrices with fewer than about 50 eigenvalues as indicative rather than precise, and read the head layers' alpha with that in mind. If the <i>median</i> alpha over all leaves is above 6, the header warns that the whole checkpoint looks undertrained.</p>
 
-<h2>Graph metrics: Dirichlet energy and MAD</h2>
+<h2 id="g-graph">Graph metrics: Dirichlet energy and MAD</h2>
 <p>These run only when you pass <code>edge_index_fn</code>, and only for modules whose output is node-aligned (one row per node of the batch). They answer a different question from everything else here: not "is this module out of room" but "has message passing destroyed the distinctions between nodes". Widening cannot fix oversmoothing, so a module diagnosed this way is taken off the growth list entirely.</p>
 <p><b>Dirichlet energy</b> is computed on <i>centred</i> features: the mean over edges of ‖x<sub>i</sub> − x<sub>j</sub>‖² divided by the mean over nodes of ‖x<sub>i</sub> − x̄‖². Random independent features give about 2, perfectly smoothed features give 0. <b>MAD</b> is the mean cosine distance to neighbours on the raw features.</p>
 <p><b>Read the decay, never the level.</b> A common offset makes any normalised energy look small without smoothing having occurred: post-ReLU activations all sit in the positive orthant. Centring removes the offset, and the verdict still only uses the <i>ratio</i> to the nearest upstream module that has a Dirichlet reading (shown as <i>dirichlet ref</i> in the metric grid). <i>Oversmoothed</i> fires only when energy is below 0.05 in absolute terms <b>and</b> below 30 % of that upstream value.</p>
 <p>MAD is shown but not trusted. When every feature dimension shares a sign, cosine distances collapse toward zero regardless of how distinct the nodes are, which after a ReLU is the normal state. Use it as corroboration for a Dirichlet decay, never on its own.</p>
 
-<h2>Redundancy and unit health</h2>
+<h2 id="g-redundancy">Redundancy and unit health</h2>
 <p>These find width that is already present and going unused, which is the counter-evidence to every saturation reading: a module cannot be short of capacity while wasting a third of what it has.</p>
 <p><b>Linear CKA</b> measures whether two modules hold the same representation, computed over identically sampled rows:</p>
 <pre>CKA(X, Y) = ‖XᵀY‖²<sub>F</sub> / (‖XᵀX‖<sub>F</sub> ‖YᵀY‖<sub>F</sub>)</pre>
@@ -64,12 +64,12 @@
 <p><b>Dead units</b> are output dimensions whose variance across samples is essentially zero (below 10⁻⁶ of the mean unit variance). <b>Duplicate units</b> are dimensions whose absolute correlation with an earlier dimension exceeds 0.95. The duplicate signal is the stronger one: a dead unit may be an unlucky initialisation, but a duplicate is width the optimiser actively chose to spend on a copy. Either fraction summed above 35 % gives a <i>redundant</i> verdict that pre-empts saturation. Below about 10 %, neither is telling you much.</p>
 <p>The <b>activation histogram</b> is the sanity check for when a module's numbers seem wrong. A spike at zero taller than everything else (see <i>zeros</i> in its title) means a mostly-dead ReLU. Values pinned at the extremes of a bounded activation mean saturation in the classical sense. A large offset from zero explains a suspiciously low raw MAD.</p>
 
-<h2>The dataflow graph and upstream carry</h2>
+<h2 id="g-dataflow">The dataflow graph and upstream carry</h2>
 <p>The graph is the <i>runtime</i> dataflow, recovered by walking the autograd graph backwards from each module's inputs to the nearest module that produced them. That is why functional ops (<code>F.relu</code>, <code>index_add_</code>, scatter, concatenation) do not break it: they are simply steps on the walk. Nodes are the leaves plus every container that builds its own output rather than handing a child's through, such as a <code>SAGEConv</code> returning <code>lin_l(agg) + lin_r(x)</code>; those are labelled "container that computes its own output" and drawn as a box inside their own hull. Container-level edges are projections of node edges, and the root is never a node.</p>
 <p><b>Upstream carry</b> is the narrowest point along the paths feeding a module: <code>carry(M) = min(in_dim(M), Σ<sub>producers P</sub> min(width(P), carry(P)))</code>, walked in execution order. A source module carries its own input width. A nonlinearity cannot add information, so a ReLU's contribution is exactly its carry regardless of its measured rank. This encodes a constraint none of the per-module metrics can see: a module downstream of an 8-dimensional path cannot hold more than 8 dimensions of information however wide it is, even though a ReLU on that path can show an effective rank of 40.</p>
 <p>Two limits of carry to keep in mind. Producers are <i>summed</i>, which is right for a concatenation or a sum of maps of different tensors (a SAGE layer reading <code>x</code> and the neighbour mean of <code>x</code> genuinely has up to twice the rank), and an over-estimate when several producers carry the same information. And it treats message passing as pointwise: aggregation brings in other nodes' features, which carry does not count. So carry is a floor on what could be missing upstream, not an exact figure.</p>
 
-<h2>Verdicts and priority</h2>
+<h2 id="g-verdicts">Verdicts and priority</h2>
 <p>Evaluated in order; the first match wins. Every verdict above <i>saturated</i> describes a condition under which a module looks capacity-bound but is not, which is why they pre-empt it. The thresholds are in <code>capscope.THRESH</code> and can be overridden per run with <code>inspect(thresholds=...)</code>; the values used are recorded in the report. If you change them, keep the order.</p>
 <table>
   <thead><tr><th>Verdict</th><th>Fires when</th><th>What it means for you</th></tr></thead>
@@ -87,7 +87,7 @@
 </table>
 <p><b>Priority</b> is the 0 to 1 score the module list sorts on. It is a ranking device, not a measurement: read the ordering, not the number. <i>Saturated</i> scores 0.70 plus up to 0.15 for used % and 0.15 for marginal pressure; <i>tight</i> 0.35 plus up to 0.20 for how far past 60 % it is and 0.10 for pressure; <i>spare</i> up to 0.15; <i>upstream</i> 0.12, <i>undertrained</i> 0.08, <i>redundant</i> and <i>oversmoothed</i> 0.05; <i>passthrough</i> and <i>narrow</i> 0. Input-capped saturated or tight modules are multiplied by 0.6 (widen upstream instead), and any output layer (a sink of the graph) by 0.5, because its width is fixed by the task.</p>
 
-<h2>Reading them together</h2>
+<h2 id="g-together">Reading them together</h2>
 <p>No single metric decides anything. A full-looking spectrum is the entry point, not the conclusion, and four checks stand between it and a decision to spend parameters: is the checkpoint trained (alpha, the header warning), is the module relaying a narrower input (carry, rank cap), is its width already wasted (dead and duplicate units, CKA), and is the loss actually pressing on its last dimensions (the sweep, marginal pressure). Only the path through all four ends in more width.</p>
 <p>Run it in this order across the whole model rather than module by module:</p>
 <ol>
@@ -98,7 +98,7 @@
   <li><b>Check the rank cap and the carry</b> of each candidate before committing. Input-capped means the widening belongs one layer earlier.</li>
 </ol>
 
-<h2>What none of these can tell you</h2>
+<h2 id="g-limits">What none of these can tell you</h2>
 <p>Every metric here is descriptive. They characterise the state a trained model has arrived at; none of them predicts what a larger model would do.</p>
 <ul>
   <li><b>How much to add.</b> A saturated module tells you the direction, not the size. Size estimates need gradient-based growth criteria (the gap between the update backpropagation asks for and the one the layer can realise), which need a backward pass and are not in the tool.</li>
