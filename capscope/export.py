@@ -19,6 +19,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .capture import is_relative
 from .verdict import VERDICT_ORDER
 
 FORMAT = "capscope-llm/1"
@@ -147,7 +148,9 @@ def _module_record(m: dict) -> dict:
 
 
 def _cka_pairs(report, top: int) -> List[dict]:
-    """Highest off-diagonal CKA values between graph nodes, largest first."""
+    """Highest off-diagonal CKA values between graph nodes that are not
+    relatives (a container and its own children are trivially similar),
+    largest first."""
     cka = report.cka or {}
     names, M = cka.get("names") or [], cka.get("matrix") or []
     is_node = {m["name"]: bool(m.get("is_node")) for m in report.modules}
@@ -155,7 +158,7 @@ def _cka_pairs(report, top: int) -> List[dict]:
     for i, a in enumerate(names):
         for j in range(i + 1, len(names)):
             b = names[j]
-            if not (is_node.get(a) and is_node.get(b)):
+            if not (is_node.get(a) and is_node.get(b)) or is_relative(a, b):
                 continue
             v = M[i][j]
             if isinstance(v, (int, float)) and math.isfinite(v):

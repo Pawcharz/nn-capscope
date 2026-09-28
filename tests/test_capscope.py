@@ -232,6 +232,8 @@ def test_llm_export(report, tmp_path):
     assert b["producers"] == report["bottleneck"]["producers"] and b["consumers"] == report["bottleneck"]["consumers"]
     assert [tuple(e) for e in d["edges"]] == report.edges
     assert d["cka_top_pairs"] and d["cka_top_pairs"][0]["cka"] >= d["cka_top_pairs"][-1]["cka"]
+    from capscope.capture import is_relative
+    assert not any(is_relative(p["a"], p["b"]) for p in d["cka_top_pairs"])   # no container/child pairs
     # self-describing: every exported field and verdict has a legend entry; no bulk arrays
     js = report.to_llm("json")
     assert "singular_values" not in js and "cum_var" not in js and '"hist"' not in js and '"hierarchy"' not in js
