@@ -5,3 +5,4 @@ __pycache__/
 tests/_cache/
 *.egg-info/
 dist/
+.claude/worktrees/

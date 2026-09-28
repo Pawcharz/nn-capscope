@@ -24,7 +24,7 @@ button.active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 select, input[type=text] { background: var(--panel2); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 8px; }
 a { color: var(--accent); }
 
-#app { display: grid; grid-template-rows: 48px auto 1fr; height: 100vh; }
+#app { display: grid; grid-template-rows: 48px auto auto 1fr; height: 100vh; }
 header { display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
 header .brand { font-weight: 700; letter-spacing: .5px; font-size: 15px; }
 header .brand span { color: var(--accent); }
@@ -36,6 +36,16 @@ header label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
 #warnbox { display: none; background: #3b1d1d; color: #fecaca; border-bottom: 1px solid #7f1d1d; padding: 6px 14px; font-size: 12px; }
 #warnbox.show { display: block; }
 #warnbox div + div { margin-top: 4px; }
+#headline { display: none; background: #12233d; color: #bfdbfe; border-bottom: 1px solid #1e3a8a; padding: 6px 14px; font-size: 12px; line-height: 1.45; }
+#headline.show { display: block; }
+#headline b { color: #fff; }
+.srtext { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+table.sweep { border-collapse: collapse; font-family: var(--mono); font-size: 11px; margin: 4px 0 6px; }
+table.sweep th, table.sweep td { padding: 2px 8px; text-align: right; border-bottom: 1px solid #1a2233; color: var(--muted); }
+table.sweep th { color: var(--dim); font-weight: 600; }
+table.sweep td.ok { color: #22c55e; }
+table.sweep td.no { color: #ef4444; }
+table.sweep tr.used td { color: #fbbf24; }
 
 main { display: grid; grid-template-columns: var(--leftw, 340px) 6px 1fr 6px var(--rightw, 420px); min-height: 0; }
 aside, section { min-height: 0; overflow: hidden; }
@@ -48,7 +58,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* detail panel moved below the graph: the page scrolls, the panel spans the width */
 #below { display: none; border-top: 1px solid var(--line); background: var(--panel); overflow: visible; min-height: 0; }
 body.below { overflow: auto; }
-body.below #app { height: auto; min-height: 100vh; grid-template-rows: 48px auto minmax(360px, 58vh) auto; }
+body.below #app { height: auto; min-height: 100vh; grid-template-rows: 48px auto auto minmax(360px, 58vh) auto; }
 html.below, body.below { height: auto; }
 body.below main { grid-template-columns: var(--leftw, 340px) 6px 1fr; }
 body.below #gutR { display: none; }
@@ -201,6 +211,7 @@ body.below .explain { display: block; }
     </div>
   </header>
   <div id="warnbox"></div>
+  <div id="headline"></div>
   <main>
     <aside id="left">
       <div id="listtools">
@@ -303,6 +314,8 @@ document.getElementById('meta').textContent =
   (DATA.meta.base_loss !== null && DATA.meta.base_loss !== undefined ? ` · base loss ${DATA.meta.base_loss.toFixed(4)}` : '');
 const wb = document.getElementById('warnbox');
 if (DATA.warnings && DATA.warnings.length) { wb.classList.add('show'); wb.innerHTML = DATA.warnings.map(w => '<div>⚠ ' + esc(w) + '</div>').join(''); }
+const hl = document.getElementById('headline');
+if (DATA.meta.headline && DATA.meta.headline.length) { hl.classList.add('show'); hl.innerHTML = '<b>Reading:</b> ' + DATA.meta.headline.map(esc).join(' '); }
 document.getElementById('legend').innerHTML = VERDICTS.map(v => `<span><i style="background:${VC[v]}"></i>${v}</span>`).join('');
 
 // ---------------------------------------------------------------------------
@@ -486,7 +499,7 @@ function renderList() {
       <td class="name" title="${esc(m.name)} (${esc(m.type)})">${m.is_leaf ? '' : '<span style="color:#64748b">▸</span> '}${esc(m.name)}</td>
       <td><span class="pill" style="background:${col}">${m.verdict}</span></td>
       <td class="num">${m.priority.toFixed(2)}</td>
-      <td><span class="bar" title="${m.used_rank ?? '–'} of ${m.width ?? '–'} dims"><i style="width:${Math.round(100 * (m.used_frac || 0))}%;background:${col}"></i></span></td>
+      <td><span class="bar" title="${m.used_rank ?? '–'} of ${m.width ?? '–'} dims"><i style="width:${Math.round(100 * (m.used_frac || 0))}%;background:${col}"></i></span><span class="srtext">${m.used_rank ?? '–'}/${m.width ?? '–'}${m.pressure !== null && m.pressure !== undefined ? ` +${Math.round(100 * m.pressure)}%` : ''}</span></td>
       <td class="num">${fmtParams(m.n_params_total)}</td></tr>`;
   });
   html += '</tbody></table>';
@@ -582,6 +595,11 @@ function chartSweep(sw) {
   const data = chartData(F, ks, ls, 'log', useLog ? 'log' : 'lin', 'sweep', { xdom: [1, Math.max(2, sw.max_rank)], ydom: useLog ? [lo / 1.15, hi * 1.15] : [lo - (hi - lo) * 0.05, hi + Math.max(1e-9, hi - lo) * 0.05], base: sw.base_loss, thr: sw.threshold });
   return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" data-chart="${data}">${titleText(F, `Loss under SVD truncation (lower k = harsher${useLog ? ', log scale' : ''})`)}${axes(F, xt, xs, yt, ys, 'rank k (log)', 'loss')}${band}${base}<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>${pts}${used}${hoverLayer(F)}</svg></div>`;
 }
+function sweepTable(sw) {
+  let t = '<table class="sweep"><tr><th>rank k</th><th>loss</th><th>vs base</th><th></th></tr>';
+  sw.ks.forEach((k, i) => { const l = sw.losses[i]; const ok = l <= sw.threshold; t += `<tr class="${k === sw.used_rank ? 'used' : ''}"><td>${k}</td><td>${l.toPrecision(5)}</td><td>${((l / sw.base_loss - 1) * 100).toFixed(1)}%</td><td class="${ok ? 'ok' : 'no'}">${ok ? 'within tol' : 'over'}</td></tr>`; });
+  return `<div class="hint">Every (k, loss) the sweep evaluated: the log grid plus the bisection steps. The used rank is the smallest k within tolerance.</div>${t}</table>`;
+}
 function chartAlpha(alpha, weights) {
   const w = 400, h = 84; const x0 = 20, x1 = w - 20, y = 46;
   const xs = scaleLin(0, 10, x0, x1);
@@ -639,10 +657,10 @@ function renderDetail() {
   section('capacity', 'Capacity verdict inputs', 'g-verdicts',
     has(m.used_frac) ? `${m.used_rank}/${m.width} · ${pct(m.used_frac)}` : '',
     `<div class="grid">
-      ${cell('used rank', has(m.used_rank) ? `${m.used_rank} of ${m.width} (${pct(m.used_frac)})` : '–', `from the ${m.used_rank_source}: the smallest number of SVD directions of the weight the loss can live with (or, without a sweep, directions explaining 99% of activation variance). Saturated above 85% of width, tight above 60%`)}
-      ${cell('marginal pressure', has(m.pressure) ? '+' + pct(m.pressure) + ' loss' : '–', 'how much the loss rises (relative) when the weight is truncated to one SVD direction fewer than used rank')}
-      ${cell('weight rank cap', cap, 'the output-producing weight is [out × in]; its rank is at most min(in, out). input-capped (in < out): widen what feeds this module. output-capped or square: widen this module.')}
-      ${cell('upstream carry', fmt(m.carry), 'narrowest width along the dataflow paths feeding this module, propagated from the inputs; information cannot exceed it. "upstream" fires when used rank ≈ carry < width')}
+      ${cell('used rank', has(m.used_rank) ? `${m.used_rank} of ${m.width} (${pct(m.used_frac)})` : '–', (m.used_rank_source === 'truncation sweep' ? 'from the truncation sweep: the smallest number of SVD directions of the weight the loss can live with (within 1% of base). Saturated above 85% of width, tight above 60%' : (m.used_rank_source === 'n/a' ? 'no estimate: no sweep and no activations' : 'NOT from a sweep (nothing to truncate here): the number of leading activation directions holding 99% of the output variance. An activation-only estimate, inflated by nonlinearities')))}
+      ${cell('marginal pressure', has(m.pressure) ? '+' + pct(m.pressure) + ' loss' + (m.pressure < 0.05 ? ' · indifferent' : m.pressure < 0.2 ? ' · mild' : ' · pressed') : '–', 'loss rise when the weight is truncated to used rank − 1 directions. At least the 1% tolerance by construction; below ~5% the loss is indifferent to the last directions, above ~20% it is genuinely pressed')}
+      ${cell('weight rank cap', cap, (m.is_leaf ? 'this weight is [out × in]' : 'taken from the leaf that produces the container\'s output (not the container\'s own input dim)') + '; rank is at most min(in, out). input-capped (in < out): widen what feeds it. output-capped or square: widen here')}
+      ${cell('upstream carry', fmt(m.carry), (m.is_leaf ? 'narrowest width along the dataflow paths feeding this module' : 'for a container: the width of its own input') + '. Pointwise information bound: "upstream" fires when used rank ≈ carry < width. Message passing brings in other nodes\' features that carry does not count, so past the first graph layer treat it as a floor only')}
       ${cell('width (D) / input dim', `${fmt(m.width)} / ${fmt(m.in_dim)}`, 'output width is the denominator of "used %"; input dim is what the module receives')}
       ${cell('output shape', m.out_shape ? m.out_shape.join(' × ') : '–', 'shape of the output tensor on the first captured batch')}
       ${cell('parameters (own / total)', `${fmtParams(m.n_params_own)} / ${fmtParams(m.n_params_total)}`, 'own = parameters declared on this module; total = including children')}
@@ -670,15 +688,16 @@ function renderDetail() {
       ${cell('used rank / max rank', `${sw.used_rank} / ${sw.max_rank}`, 'each weight replaced by its rank-k SVD approximation (top k singular values kept, rest zeroed), model re-run, loss read; used = smallest k within tolerance; max = full rank of the largest swept weight')}
       ${cell('base loss / tolerance', `${sw.base_loss.toPrecision(4)} / +${Math.round(sw.rel_tol * 100)}%`, 'loss of the untouched model on the sweep batches; a rank k counts as enough if the truncated model stays within this tolerance of it')}
       ${cell('loss at rank 1', has(sw.loss_at_1) ? sw.loss_at_1.toPrecision(4) : '–', 'loss when every weight is cut to a single SVD direction; near the base loss on every module = undertrained checkpoint')}
-      ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–', 'relative loss increase when truncated to used rank − 1 directions; feeds the growth priority')}
-    </div>` : ''}${chartSweep(sw)}`, true);
+      ${cell('marginal pressure', has(sw.pressure) ? '+' + pct(sw.pressure) + ' loss' : '–', 'relative loss increase when truncated to used rank − 1 directions (≥ 1% by construction); feeds the growth priority')}
+      ${cell('loss at half the used rank', (() => { const half = Math.max(1, Math.floor(sw.used_rank / 2)); let bi = -1; sw.ks.forEach((k, i) => { if (k <= half) bi = i; }); return bi < 0 ? '–' : `${sw.losses[bi].toPrecision(4)} at k=${sw.ks[bi]} (+${((sw.losses[bi] / sw.base_loss - 1) * 100).toFixed(0)}%)`; })(), 'how steep the curve is left of the marker: the loss at the largest swept rank ≤ used/2')}
+    </div>` : ''}${chartSweep(sw)}${sw ? sweepTable(sw) : ''}`, true);
 
   // 4. weight spectra / alpha
   const wts = m.weights || [];
   section('alpha', 'Weight spectrum (alpha)', 'g-alpha',
     has(m.alpha) && Number.isFinite(m.alpha) ? `α ${m.alpha.toFixed(2)} · ${esc(m.alpha_reading || '')}` : 'no matrix weights',
     `<div class="grid">
-      ${cell('alpha (Hill, median over weights)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || 'n/a')}`, 'Hill power-law fit to the top tenth of the eigenvalues of WᵀW (squared singular values of the weight); > 6 undertrained (≈ random init), 2–6 well conditioned, < 2 over-trained')}
+      ${cell('alpha (Hill, median over weights)', `${fmt(m.alpha, 2)} · ${esc(m.alpha_reading || 'n/a')}${wts.length && Math.max(...wts.map(w => w.max_rank)) < 50 ? ` · indicative only (${Math.max(...wts.map(w => w.max_rank))} eigenvalues, k=${Math.max(...wts.map(w => w.alpha_k))})` : ''}`, 'Hill power-law fit to the top tenth of the eigenvalues of WᵀW (squared singular values of the weight); > 6 undertrained (≈ random init), 2–6 well conditioned, < 2 over-trained')}
       ${cell('matrix weights', wts.length ? wts.map(w => `${esc(w.name)} [${w.shape.join('×')}]`).join(', ') : '–', 'every ≥2-D parameter inside the module, as [out × in]; convolutions are flattened')}
       ${cell('binding weight', m.rank_cap ? `${esc(m.rank_cap)}-capped at ${m.max_weight_rank}` : '–', 'the weight producing this module\'s output, and which side bounds its rank')}
     </div>
@@ -691,7 +710,7 @@ function renderDetail() {
       has(m.dirichlet) ? `dirichlet ${fmt(m.dirichlet, 3)}${m.dirichlet_ref ? ` · ${pct(m.dirichlet_ratio)} of upstream` : ''}` : 'not node-aligned',
       `<div class="grid">
         ${cell('Dirichlet energy (centred)', has(m.dirichlet) ? fmt(m.dirichlet, 3) : '–', 'mean over edges of ‖xᵢ − xⱼ‖² over mean over nodes of ‖xᵢ − x̄‖², on centred node outputs; random ≈ 2, collapsed → 0')}
-        ${cell('vs nearest upstream graph layer', m.dirichlet_ref ? `${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)} (${fmt(M[m.dirichlet_ref] ? M[m.dirichlet_ref].dirichlet : null, 3)})` : '–', 'this module\'s Dirichlet energy as a fraction of the nearest upstream module that has one; oversmoothed fires when energy < 0.05 and this < 30%')}
+        ${cell('vs nearest upstream graph layer', m.dirichlet_ref ? `${pct(m.dirichlet_ratio)} of ${esc(m.dirichlet_ref)} (${fmt(M[m.dirichlet_ref] ? M[m.dirichlet_ref].dirichlet : null, 3)})` : (has(m.dirichlet) ? 'no upstream reading: level alone is not used by the verdict' : '–'), 'this module\'s Dirichlet energy as a fraction of the nearest upstream module that has one; oversmoothed fires when energy < 0.05 and this < 30%')}
         ${cell('MAD (raw cosine)', fmt(m.mad, 3), 'mean cosine distance between each node and its neighbours, raw features; collapses whenever features share a sign, corroboration only')}
       </div>`);
   }

@@ -98,6 +98,7 @@ def inspect(
 
     assign_verdicts(mods, cka, thresholds)
     warnings = _detect_problems(mods, base_loss, loss_fn is not None, cap)
+    headline = _headline(mods, loss_fn is not None)
 
     hierarchy = _hierarchy(model, mods)
     meta = {
@@ -108,6 +109,7 @@ def inspect(
         "has_graph": edge_index_fn is not None,
         "base_loss": base_loss,
         "thresholds": {**THRESH, **(thresholds or {})},
+        "headline": headline,
     }
     # strip private fields
     for m in mods.values():
@@ -234,6 +236,41 @@ def _hierarchy(model: nn.Module, mods: Dict[str, dict]) -> List[dict]:
     return out
 
 
+def _headline(mods: Dict[str, dict], has_loss: bool) -> List[str]:
+    """One-paragraph reading of the whole report: are any modules actually
+    pressed for width, or is the ranking just an ordering among modules the
+    loss does not care about?"""
+    cands = [m for m in mods.values() if m["verdict"] in ("saturated", "tight")]
+    out: List[str] = []
+    if not cands:
+        out.append("No module is saturated or tight: nothing in this checkpoint is width-limited by "
+                   "the tool's thresholds.")
+        return out
+    top = sorted(cands, key=lambda m: -m["priority"])[:4]
+    desc = ", ".join(f"{m['name']} ({m['verdict']}, {100 * (m.get('used_frac') or 0):.0f}% used"
+                     + (f", pressure +{100 * m['pressure']:.0f}%" if m.get("pressure") is not None else "")
+                     + ")" for m in top)
+    out.append(f"Top width candidates: {desc}.")
+    if has_loss:
+        press = [m["pressure"] for m in cands if m.get("pressure") is not None]
+        if press and max(press) < 0.05:
+            out.append(f"None of them is under pressure: losing their last used direction costs at most "
+                       f"+{100 * max(press):.0f}% loss (the tolerance itself is 1%). The loss is not pressing "
+                       "on any module's width; look at the input features, the data, the optimisation or "
+                       "head conflict before adding width.")
+        elif press:
+            hot = [m for m in cands if (m.get("pressure") or 0) >= 0.05]
+            names = ", ".join(f"{m['name']} (+{100 * m['pressure']:.0f}%)" for m in sorted(hot, key=lambda m: -m["pressure"])[:4])
+            out.append(f"Modules whose last used direction costs 5% or more of the loss: {names}. Those are "
+                       "the genuine growth candidates; the rest of the list is an ordering among modules the "
+                       "loss is indifferent to.")
+    inp = [m for m in mods.values() if m["verdict"] == "upstream" and not m["producers"]]
+    if inp:
+        out.append(f"{', '.join(m['name'] for m in inp[:3])} use every direction the raw input supplies "
+                   f"(carry = input width): widening there cannot help, richer input features can.")
+    return out
+
+
 def _detect_problems(mods, base_loss, has_loss, cap) -> List[str]:
     warns: List[str] = []
     if has_loss:
@@ -327,8 +364,11 @@ class Report:
     @classmethod
     def from_dict(cls, d: dict) -> "Report":
         mods = {m["name"]: m for m in d["modules"]}
+        meta = d.get("meta", {})
+        if "headline" not in meta:
+            meta["headline"] = _headline(mods, bool(meta.get("has_loss")))
         return cls(mods, [tuple(e) for e in d.get("edges", [])], d.get("hierarchy", []),
-                   d.get("cka", {"names": [], "matrix": []}), d.get("warnings", []), d.get("meta", {}))
+                   d.get("cka", {"names": [], "matrix": []}), d.get("warnings", []), meta)
 
     @classmethod
     def load(cls, path: str) -> "Report":
@@ -403,6 +443,8 @@ class Report:
         lines.append(f"{len(self.modules)} modules, {len(self.edges)} dataflow edges, "
                      f"{_fmt_params(self.meta['n_params'])} parameters"
                      + (f", base loss {self.meta['base_loss']:.4f}" if self.meta.get("base_loss") is not None else ""))
+        for h in self.meta.get("headline") or []:
+            lines.append(f"READING: {h}")
         for w in self.warnings:
             lines.append(f"WARNING: {w}")
         out = "\n".join(lines)
